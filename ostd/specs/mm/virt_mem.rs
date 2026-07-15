@@ -1196,8 +1196,7 @@ impl GlobalMemView {
             *final(self) == old(self).tlb_flush_vaddr(vaddr),
             final(self).inv(),
     {
-        let ghost flushed = old(self).tlb_flush_vaddr(vaddr);
-        self.tlb_mappings = flushed.tlb_mappings;
+        self.tlb_mappings = old(self).tlb_flush_vaddr(vaddr).tlb_mappings;
 
         assert(self.pt_mappings == old(self).pt_mappings);
         assert(forall|pa: Paddr| #[trigger] self.is_mapped(pa) == old(self).is_mapped(pa));
@@ -1286,9 +1285,8 @@ impl GlobalMemView {
                     let n = choose|n: Mapping|
                         self.pt_mappings.contains(n) && n.pa_range.start <= pa < n.pa_range.end;
                 }
-            } else if old(self).is_mapped(pa) {
-                let n = choose|n: Mapping|
-                    old(self).pt_mappings.contains(n) && n.pa_range.start <= pa < n.pa_range.end;
+            } else {
+                assert(self.is_mapped(pa) == old(self).is_mapped(pa));
             }
         };
     }
