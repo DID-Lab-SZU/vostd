@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "tools/verification-progress",
     "verified_libs/bitflags",
     "verified_libs/vstd_extra",
     "verified_libs/ostd-pod",

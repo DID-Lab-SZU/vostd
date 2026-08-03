@@ -1,0 +1,2400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>VOSTD Verification Progress Dashboard</title>
+    <style>
+        :root {
+            --bg: #f6f8fa;
+            --panel: #ffffff;
+            --panel-muted: #f6f8fa;
+            --border: #d0d7de;
+            --border-subtle: #d8dee4;
+            --text: #1f2328;
+            --muted: #656d76;
+            --header: #0d1117;
+            --header-text: #f0f6fc;
+            --blue: #0969da;
+            --blue-soft: #ddf4ff;
+            --green: #1a7f37;
+            --green-soft: #dafbe1;
+            --amber: #9a6700;
+            --amber-soft: #fff8c5;
+            --red: #cf222e;
+            --red-soft: #ffebe9;
+            --purple: #8250df;
+            --purple-soft: #fbefff;
+            --cyan: #0a7ea4;
+            --cyan-soft: #ddf4ff;
+            --shadow: 0 1px 0 rgba(31, 35, 40, 0.04);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            min-width: 320px;
+            color: var(--text);
+            background: var(--bg);
+            font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        button {
+            color: inherit;
+        }
+
+        a {
+            color: var(--blue);
+        }
+
+        .skip-link {
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            z-index: 100;
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: #fff;
+            background: var(--blue);
+            transform: translateY(-150%);
+        }
+
+        .skip-link:focus {
+            transform: translateY(0);
+        }
+
+        .topbar {
+            color: var(--header-text);
+            background: var(--header);
+            border-bottom: 1px solid #21262d;
+        }
+
+        .topbar-inner {
+            width: min(1480px, calc(100% - 40px));
+            min-height: 64px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            flex: 0 0 auto;
+            display: grid;
+            place-items: center;
+            border: 1px solid #484f58;
+            border-radius: 8px;
+            color: #7ee787;
+            background: #161b22;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+        }
+
+        .brand-copy {
+            min-width: 0;
+        }
+
+        .brand-title {
+            margin: 0;
+            overflow: hidden;
+            font-size: 17px;
+            font-weight: 650;
+            line-height: 1.25;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .brand-subtitle {
+            color: #8c959f;
+            font-size: 12px;
+        }
+
+        .topbar-meta {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .top-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 28px;
+            padding: 3px 9px;
+            border: 1px solid #30363d;
+            border-radius: 999px;
+            color: #c9d1d9;
+            background: #161b22;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .top-chip .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #8c959f;
+        }
+
+        .top-chip.passed .dot {
+            background: #3fb950;
+            box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.14);
+        }
+
+        .top-chip.failed .dot {
+            background: #f85149;
+            box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.14);
+        }
+
+        .layout {
+            width: min(1480px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 28px 0 48px;
+        }
+
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+            margin-bottom: 18px;
+        }
+
+        .hero h1 {
+            margin: 0 0 5px;
+            font-size: clamp(24px, 3vw, 32px);
+            line-height: 1.25;
+            letter-spacing: -0.025em;
+        }
+
+        .hero p {
+            max-width: 800px;
+            margin: 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .hero-status {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 9px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .status-pill::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .status-passed {
+            color: var(--green);
+            border-color: #aceebb;
+            background: var(--green-soft);
+        }
+
+        .status-partial,
+        .status-unconfirmed {
+            color: var(--amber);
+            border-color: #d4a72c66;
+            background: var(--amber-soft);
+        }
+
+        .status-failed {
+            color: var(--red);
+            border-color: #ff818266;
+            background: var(--red-soft);
+        }
+
+        .scope-banner {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: start;
+            margin-bottom: 18px;
+            padding: 13px 15px;
+            border: 1px solid #d4a72c88;
+            border-radius: var(--radius);
+            background: #fffdf0;
+            box-shadow: var(--shadow);
+        }
+
+        .scope-icon {
+            width: 24px;
+            height: 24px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            color: var(--amber);
+            background: var(--amber-soft);
+            font-weight: 700;
+        }
+
+        .scope-banner strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .scope-banner p {
+            margin: 0;
+            color: #57606a;
+        }
+
+        .scope-stat {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .scope-stat strong {
+            color: var(--amber);
+            font-size: 18px;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        .panel-header {
+            min-height: 52px;
+            padding: 13px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .panel-header h2,
+        .panel-header h3 {
+            margin: 0;
+            font-size: 16px;
+            line-height: 1.3;
+        }
+
+        .panel-header p {
+            margin: 2px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .panel-body {
+            padding: 16px;
+        }
+
+        .coverage-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .coverage-hero {
+            display: grid;
+            grid-template-columns: minmax(180px, 0.5fr) minmax(280px, 1fr);
+            gap: 24px;
+            align-items: center;
+        }
+
+        .big-number {
+            font-size: clamp(42px, 6vw, 64px);
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.055em;
+        }
+
+        .big-number-label {
+            margin-top: 7px;
+            color: var(--muted);
+        }
+
+        .coverage-count {
+            margin-top: 10px;
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .coverage-count strong {
+            color: var(--green);
+        }
+
+        .stacked-track,
+        .simple-track {
+            width: 100%;
+            height: 14px;
+            overflow: hidden;
+            display: flex;
+            border-radius: 999px;
+            background: #eaeef2;
+        }
+
+        .stacked-track > span,
+        .simple-track > span {
+            min-width: 0;
+            transition: width 220ms ease;
+        }
+
+        .segment-checked {
+            background: var(--green);
+        }
+
+        .segment-trusted {
+            background: #d4a72c;
+        }
+
+        .segment-unverified {
+            background: #ff8182;
+        }
+
+        .segment-contract {
+            background: var(--blue);
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            margin-top: 11px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-swatch {
+            width: 9px;
+            height: 9px;
+            border-radius: 2px;
+        }
+
+        .coverage-note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .contract-value {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .contract-value strong {
+            color: var(--blue);
+            font-size: 30px;
+            line-height: 1;
+        }
+
+        .contract-value span {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .source-facts {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .source-fact {
+            padding: 10px 12px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: var(--panel-muted);
+        }
+
+        .source-fact strong {
+            display: block;
+            font-size: 18px;
+            line-height: 1.25;
+        }
+
+        .source-fact span {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .metric-cards {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .metric-card {
+            width: 100%;
+            min-height: 112px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-top: 3px solid var(--metric-color, var(--blue));
+            border-radius: var(--radius);
+            text-align: left;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+
+        .metric-card:hover {
+            border-color: var(--metric-color, var(--blue));
+            box-shadow: 0 3px 12px rgba(31, 35, 40, 0.09);
+            transform: translateY(-1px);
+        }
+
+        .metric-card:focus-visible {
+            outline: 3px solid #54aeff66;
+            outline-offset: 2px;
+        }
+
+        .metric-card.active {
+            border-color: var(--metric-color, var(--blue));
+            background: var(--metric-soft, var(--blue-soft));
+        }
+
+        .metric-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.035em;
+        }
+
+        .metric-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--metric-color, var(--blue));
+        }
+
+        .metric-value {
+            margin-top: 9px;
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.035em;
+        }
+
+        .metric-help {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .section-heading {
+            margin: 26px 0 11px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .section-heading h2 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: -0.015em;
+        }
+
+        .section-heading p {
+            margin: 2px 0 0;
+            color: var(--muted);
+        }
+
+        .architecture-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .arch-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .arch-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: var(--arch-color, var(--blue));
+        }
+
+        .arch-card-button {
+            width: 100%;
+            padding: 16px 16px 16px 19px;
+            border: 0;
+            text-align: left;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .arch-card-button:hover {
+            background: #f6f8fa99;
+        }
+
+        .arch-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .arch-name {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .arch-target {
+            margin-top: 2px;
+            color: var(--muted);
+            font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+            word-break: break-all;
+        }
+
+        .arch-coverage {
+            margin-top: 18px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .arch-coverage strong {
+            font-size: 28px;
+            line-height: 1;
+        }
+
+        .arch-coverage span {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .arch-facts {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .arch-fact {
+            min-width: 0;
+        }
+
+        .arch-fact strong {
+            display: block;
+            overflow: hidden;
+            font-size: 15px;
+            line-height: 1.3;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .arch-fact span {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .insight-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .debt-total,
+        .unsafe-total {
+            color: var(--red);
+            font-size: 26px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .debt-list,
+        .line-list {
+            display: grid;
+            gap: 9px;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(110px, 1fr) minmax(70px, 1.3fr) auto;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+        }
+
+        .bar-row-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mini-track {
+            height: 6px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #eaeef2;
+        }
+
+        .mini-track span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--row-color, var(--blue));
+        }
+
+        .bar-row-value {
+            min-width: 42px;
+            color: var(--muted);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .line-stack {
+            height: 18px;
+            margin-bottom: 14px;
+        }
+
+        .segment-spec {
+            background: var(--purple);
+        }
+
+        .segment-proof {
+            background: var(--cyan);
+        }
+
+        .segment-exec {
+            background: var(--blue);
+        }
+
+        .segment-other {
+            background: #afb8c1;
+        }
+
+        .unsafe-layout {
+            display: grid;
+            gap: 18px;
+        }
+
+        .unsafe-overview {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .unsafe-overview p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .unsafe-legend {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .unsafe-item {
+            padding: 9px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: var(--panel-muted);
+        }
+
+        .unsafe-item strong {
+            display: block;
+            font-size: 18px;
+        }
+
+        .unsafe-item span {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .baseline-panel {
+            display: none;
+            margin-top: 16px;
+        }
+
+        .baseline-panel.visible {
+            display: block;
+        }
+
+        .delta-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .delta-item {
+            padding: 10px 12px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: var(--panel-muted);
+        }
+
+        .delta-item strong {
+            display: block;
+            font-size: 17px;
+        }
+
+        .delta-item span {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .detail-panel {
+            margin-top: 12px;
+        }
+
+        .toolbar {
+            padding: 12px;
+            display: grid;
+            grid-template-columns: minmax(230px, 1.6fr) repeat(3, minmax(135px, 0.7fr)) auto;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .control {
+            width: 100%;
+            height: 34px;
+            padding: 5px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            background: var(--panel);
+            outline: none;
+        }
+
+        .control:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px #54aeff33;
+        }
+
+        .search-wrap {
+            position: relative;
+        }
+
+        .search-wrap .control {
+            padding-left: 32px;
+        }
+
+        .search-icon {
+            position: absolute;
+            top: 50%;
+            left: 10px;
+            color: var(--muted);
+            pointer-events: none;
+            transform: translateY(-50%);
+        }
+
+        .reset-button {
+            height: 34px;
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel-muted);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .reset-button:hover {
+            background: #eaeef2;
+        }
+
+        .active-filter {
+            min-height: 35px;
+            padding: 8px 12px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: #57606a;
+            background: var(--blue-soft);
+            font-size: 12px;
+        }
+
+        .active-filter.visible {
+            display: flex;
+        }
+
+        .clear-metric {
+            padding: 2px 7px;
+            border: 1px solid #54aeff88;
+            border-radius: 999px;
+            color: var(--blue);
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            min-width: 1280px;
+            border-collapse: collapse;
+            font-variant-numeric: tabular-nums;
+        }
+
+        th,
+        td {
+            padding: 9px 10px;
+            border-bottom: 1px solid var(--border-subtle);
+            text-align: right;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        th:first-child,
+        td:first-child,
+        th:nth-child(2),
+        td:nth-child(2) {
+            text-align: left;
+        }
+
+        th {
+            color: #57606a;
+            background: var(--panel-muted);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.015em;
+            text-transform: uppercase;
+        }
+
+        .sort-button {
+            width: 100%;
+            padding: 0;
+            border: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 5px;
+            color: inherit;
+            background: transparent;
+            cursor: pointer;
+            text-transform: inherit;
+            letter-spacing: inherit;
+        }
+
+        th:nth-child(2) .sort-button {
+            justify-content: flex-start;
+        }
+
+        .sort-indicator {
+            width: 10px;
+            color: #8c959f;
+        }
+
+        .data-row {
+            background: #fff;
+        }
+
+        .data-row:hover {
+            background: #f6f8fa;
+        }
+
+        .data-row.expanded {
+            background: #f6f8fa;
+        }
+
+        .expand-button {
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            color: var(--muted);
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .expand-button:hover {
+            border-color: var(--border);
+            background: #fff;
+        }
+
+        .scope-cell {
+            max-width: 260px;
+        }
+
+        .scope-name {
+            overflow: hidden;
+            color: var(--text);
+            font-weight: 600;
+            text-overflow: ellipsis;
+        }
+
+        .scope-meta {
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 11px;
+            text-overflow: ellipsis;
+        }
+
+        .number-checked {
+            color: var(--green);
+            font-weight: 600;
+        }
+
+        .number-trusted {
+            color: var(--amber);
+            font-weight: 600;
+        }
+
+        .number-unverified,
+        .number-debt {
+            color: var(--red);
+            font-weight: 600;
+        }
+
+        .coverage-cell {
+            min-width: 105px;
+        }
+
+        .coverage-cell-value {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 7px;
+        }
+
+        .coverage-mini {
+            width: 42px;
+            height: 5px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #eaeef2;
+        }
+
+        .coverage-mini span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--green);
+        }
+
+        .detail-row td {
+            padding: 0;
+            text-align: left;
+            white-space: normal;
+            background: #f6f8fa;
+        }
+
+        .row-detail {
+            padding: 15px 46px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-card {
+            padding: 12px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: #fff;
+        }
+
+        .detail-card h4 {
+            margin: 0 0 8px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .detail-list {
+            margin: 0;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 4px 10px;
+            font-size: 12px;
+        }
+
+        .detail-list dt {
+            color: var(--muted);
+        }
+
+        .detail-list dd {
+            margin: 0;
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            padding: 48px 20px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .pagination {
+            min-height: 54px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .result-count {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .page-button {
+            min-width: 32px;
+            height: 30px;
+            padding: 3px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .page-button:hover:not(:disabled) {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+
+        .page-button:disabled {
+            color: #afb8c1;
+            background: var(--panel-muted);
+            cursor: not-allowed;
+        }
+
+        .page-text {
+            min-width: 90px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .definitions {
+            margin-top: 24px;
+        }
+
+        .definition-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .definition-item dt {
+            margin-bottom: 3px;
+            font-weight: 650;
+        }
+
+        .definition-item dd {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .warnings {
+            display: none;
+            margin-top: 14px;
+            padding: 12px 14px;
+            border: 1px solid #d4a72c88;
+            border-radius: var(--radius);
+            color: #57606a;
+            background: #fffdf0;
+        }
+
+        .warnings.visible {
+            display: block;
+        }
+
+        .warnings strong {
+            color: var(--amber);
+        }
+
+        .warnings ul {
+            margin: 5px 0 0;
+            padding-left: 20px;
+        }
+
+        footer {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            background: #fff;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        code {
+            padding: 1px 4px;
+            border-radius: 4px;
+            background: #afb8c133;
+            font: 0.92em ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        @media (max-width: 1180px) {
+            .metric-cards {
+                grid-template-columns: repeat(3, minmax(150px, 1fr));
+            }
+
+            .architecture-grid,
+            .insight-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .architecture-grid > :last-child,
+            .insight-grid > :last-child {
+                grid-column: 1 / -1;
+            }
+
+            .toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .search-wrap {
+                grid-column: 1 / -1;
+            }
+
+            .row-detail {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 820px) {
+            .topbar-inner,
+            .layout {
+                width: min(100% - 24px, 1480px);
+            }
+
+            .topbar-inner {
+                padding: 10px 0;
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .topbar-meta {
+                justify-content: flex-start;
+            }
+
+            .hero {
+                flex-direction: column;
+            }
+
+            .hero-status {
+                align-items: flex-start;
+            }
+
+            .scope-banner {
+                grid-template-columns: auto 1fr;
+            }
+
+            .scope-stat {
+                grid-column: 2;
+                text-align: left;
+            }
+
+            .coverage-grid,
+            .coverage-hero,
+            .architecture-grid,
+            .insight-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .architecture-grid > :last-child,
+            .insight-grid > :last-child {
+                grid-column: auto;
+            }
+
+            .delta-grid,
+            .definition-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .pagination {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .metric-cards,
+            .source-facts,
+            .toolbar,
+            .delta-grid,
+            .definition-grid,
+            .row-detail {
+                grid-template-columns: 1fr;
+            }
+
+            .search-wrap {
+                grid-column: auto;
+            }
+
+            .metric-card {
+                min-height: 96px;
+            }
+
+            .arch-facts,
+            .unsafe-legend {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+
+            .row-detail {
+                padding: 12px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">V</div>
+                <div class="brand-copy">
+                    <div class="brand-title">VOSTD Verification Progress</div>
+                    <div class="brand-subtitle">Verus verification dashboard</div>
+                </div>
+            </div>
+            <div class="topbar-meta" aria-label="报告元数据">
+                <span class="top-chip" id="verification-chip"><span class="dot"></span><span id="verification-chip-text">读取中</span></span>
+                <span class="top-chip" id="commit-chip">commit —</span>
+                <span class="top-chip" id="verus-chip">Verus —</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="layout" id="main-content">
+        <section class="hero" aria-labelledby="page-title">
+            <div>
+                <h1 id="page-title">VOSTD 验证进度</h1>
+                <p>主覆盖率衡量执行函数体是否真正通过 Verus 检查；Proof、Spec、代码行和信任边界单独展示，用来说明证明规模和剩余风险。</p>
+            </div>
+            <div class="hero-status">
+                <span class="status-pill status-unconfirmed" id="project-status">读取中</span>
+                <span id="report-time">报告时间 —</span>
+            </div>
+        </section>
+
+        <section class="scope-banner" aria-labelledby="scope-title">
+            <div class="scope-icon" aria-hidden="true">!</div>
+            <div>
+                <strong id="scope-title">统计范围包含三个架构</strong>
+                <p id="scope-message">正在读取架构确认状态。</p>
+            </div>
+            <div class="scope-stat">
+                <strong id="scope-gap">—</strong>
+                <span>x86 与全项目覆盖率差值</span>
+            </div>
+        </section>
+
+        <section class="coverage-grid" aria-label="核心覆盖率">
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>主覆盖率</h2>
+                        <p>checked / (checked + trusted + unverified)</p>
+                    </div>
+                    <span class="status-pill status-unconfirmed" id="coverage-status">部分确认</span>
+                </div>
+                <div class="panel-body coverage-hero">
+                    <div>
+                        <div class="big-number" id="coverage-value">—</div>
+                        <div class="big-number-label">项目级执行函数覆盖率</div>
+                        <div class="coverage-count" id="coverage-count">—</div>
+                    </div>
+                    <div>
+                        <div class="stacked-track" aria-label="执行函数分类">
+                            <span class="segment-checked" id="checked-segment"></span>
+                            <span class="segment-trusted" id="trusted-segment"></span>
+                            <span class="segment-unverified" id="unverified-segment"></span>
+                        </div>
+                        <div class="legend" id="exec-legend"></div>
+                        <p class="coverage-note">绿色才是已经检查函数体的 exec 函数；黄色是信任边界，红色是未验证或尚未确认。</p>
+                    </div>
+                </div>
+            </article>
+
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>契约覆盖率</h2>
+                        <p>带 requires / ensures 等实质规格的 exec 函数</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="contract-value">
+                        <strong id="contract-value">—</strong>
+                        <span id="contract-count">—</span>
+                    </div>
+                    <div class="simple-track" aria-label="契约覆盖率">
+                        <span class="segment-contract" id="contract-segment"></span>
+                    </div>
+                    <div class="source-facts">
+                        <div class="source-fact"><strong id="source-files">—</strong><span>纳入源码文件</span></div>
+                        <div class="source-fact"><strong id="source-lines">—</strong><span>物理代码行</span></div>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="metric-cards" aria-label="主要指标筛选">
+            <button class="metric-card" type="button" data-metric="checked" style="--metric-color: var(--green); --metric-soft: var(--green-soft)">
+                <span class="metric-title">Checked <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-checked">—</span>
+                <span class="metric-help">完整构建确认过函数体</span>
+            </button>
+            <button class="metric-card" type="button" data-metric="trusted" style="--metric-color: #d4a72c; --metric-soft: var(--amber-soft)">
+                <span class="metric-title">Trusted <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-trusted">—</span>
+                <span class="metric-help">签名可用，但函数体未检查</span>
+            </button>
+            <button class="metric-card" type="button" data-metric="unverified" style="--metric-color: var(--red); --metric-soft: var(--red-soft)">
+                <span class="metric-title">Unverified <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-unverified">—</span>
+                <span class="metric-help">普通 Rust 或架构尚未确认</span>
+            </button>
+            <button class="metric-card" type="button" data-metric="proof" style="--metric-color: var(--cyan); --metric-soft: var(--cyan-soft)">
+                <span class="metric-title">Proof <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-proof">—</span>
+                <span class="metric-help">证明规模，不计入覆盖率</span>
+            </button>
+            <button class="metric-card" type="button" data-metric="spec" style="--metric-color: var(--purple); --metric-soft: var(--purple-soft)">
+                <span class="metric-title">Spec <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-spec">—</span>
+                <span class="metric-help">规格规模，不计入覆盖率</span>
+            </button>
+            <button class="metric-card" type="button" data-metric="debt" style="--metric-color: #bc4c00; --metric-soft: #fff1e5">
+                <span class="metric-title">Trust debt <span class="metric-dot"></span></span>
+                <span class="metric-value" id="metric-debt">—</span>
+                <span class="metric-help">需要持续审计的信任边界</span>
+            </button>
+        </section>
+
+        <div class="section-heading">
+            <div>
+                <h2>分架构进度</h2>
+                <p>x86 展示当前完整构建结果；RISC-V、LoongArch 展示专属源码库存和确认状态。</p>
+            </div>
+        </div>
+        <section class="architecture-grid" id="architecture-grid" aria-label="架构进度"></section>
+
+        <div class="section-heading">
+            <div>
+                <h2>证明规模与信任边界</h2>
+                <p>这些数据解释工作量和风险，但不作为主覆盖率的分子。</p>
+            </div>
+        </div>
+        <section class="insight-grid">
+            <article class="panel">
+                <div class="panel-header">
+                    <div><h3>信任债务</h3><p>external、axiom、assume、admit 等边界</p></div>
+                    <strong class="debt-total" id="debt-total">—</strong>
+                </div>
+                <div class="panel-body debt-list" id="debt-list"></div>
+            </article>
+            <article class="panel">
+                <div class="panel-header">
+                    <div><h3>物理代码行组成</h3><p>互斥优先级：Trusted &gt; Spec &gt; Proof &gt; Exec</p></div>
+                    <strong id="line-total">—</strong>
+                </div>
+                <div class="panel-body">
+                    <div class="stacked-track line-stack" id="line-stack" aria-label="代码行组成"></div>
+                    <div class="line-list" id="line-list"></div>
+                </div>
+            </article>
+            <article class="panel">
+                <div class="panel-header">
+                    <div><h3>Unsafe exec 分布</h3><p>unsafe 函数仍按 checked / trusted / unverified 分类</p></div>
+                </div>
+                <div class="panel-body unsafe-layout">
+                    <div class="unsafe-overview">
+                        <strong class="unsafe-total" id="unsafe-total">—</strong>
+                        <p>unsafe exec<br>函数总数</p>
+                    </div>
+                    <div class="stacked-track" id="unsafe-stack"></div>
+                    <div class="unsafe-legend" id="unsafe-legend"></div>
+                </div>
+            </article>
+        </section>
+
+        <section class="panel baseline-panel" id="baseline-panel" aria-labelledby="baseline-title">
+            <div class="panel-header">
+                <div><h2 id="baseline-title">相对基线的变化</h2><p id="baseline-commit">—</p></div>
+            </div>
+            <div class="panel-body delta-grid" id="baseline-deltas"></div>
+        </section>
+
+        <div class="section-heading" id="detail-heading">
+            <div>
+                <h2>架构、包与子系统明细</h2>
+                <p>各行是可钻取的重叠切片，不能相加作为项目总数。</p>
+            </div>
+        </div>
+        <section class="panel detail-panel" aria-labelledby="detail-heading">
+            <div class="toolbar">
+                <label class="search-wrap">
+                    <span class="search-icon" aria-hidden="true">⌕</span>
+                    <span class="skip-link">搜索</span>
+                    <input class="control" id="search-input" type="search" placeholder="搜索架构、包或子系统…" autocomplete="off">
+                </label>
+                <label>
+                    <span class="skip-link">层级</span>
+                    <select class="control" id="kind-filter">
+                        <option value="all">全部层级</option>
+                        <option value="architecture">架构</option>
+                        <option value="package">包</option>
+                        <option value="subsystem">子系统</option>
+                    </select>
+                </label>
+                <label>
+                    <span class="skip-link">确认状态</span>
+                    <select class="control" id="status-filter">
+                        <option value="all">全部确认状态</option>
+                        <option value="passed">已确认</option>
+                        <option value="unconfirmed">未确认</option>
+                        <option value="failed">验证失败</option>
+                    </select>
+                </label>
+                <label>
+                    <span class="skip-link">包</span>
+                    <select class="control" id="package-filter"><option value="all">全部范围</option></select>
+                </label>
+                <button class="reset-button" id="reset-button" type="button">重置筛选</button>
+            </div>
+            <div class="active-filter" id="active-filter">
+                <span id="active-filter-text"></span>
+                <button class="clear-metric" id="clear-metric" type="button">清除指标筛选</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th aria-label="展开"></th>
+                            <th><button class="sort-button" type="button" data-sort="name">范围 <span class="sort-indicator"></span></button></th>
+                            <th>状态</th>
+                            <th><button class="sort-button" type="button" data-sort="files">文件 <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="checked">Checked <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="trusted">Trusted <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="unverified">Unverified <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="coverage">主覆盖率 <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="contract">契约覆盖率 <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="proof">Proof <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="spec">Spec <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="debt">信任债务 <span class="sort-indicator"></span></button></th>
+                            <th><button class="sort-button" type="button" data-sort="lines">代码行 <span class="sort-indicator"></span></button></th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-body"></tbody>
+                </table>
+                <div class="empty-state" id="empty-state" hidden>没有符合当前条件的范围。</div>
+            </div>
+            <div class="pagination">
+                <div class="result-count" id="result-count">—</div>
+                <div class="pagination-controls">
+                    <label>
+                        <span class="skip-link">每页数量</span>
+                        <select class="control" id="page-size" style="width:auto;height:30px">
+                            <option value="20">20 / 页</option>
+                            <option value="50">50 / 页</option>
+                            <option value="100">100 / 页</option>
+                        </select>
+                    </label>
+                    <button class="page-button" id="prev-page" type="button" aria-label="上一页">‹</button>
+                    <span class="page-text" id="page-text">—</span>
+                    <button class="page-button" id="next-page" type="button" aria-label="下一页">›</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel definitions" aria-labelledby="definitions-title">
+            <div class="panel-header"><h2 id="definitions-title">怎样读这些数字</h2></div>
+            <div class="panel-body definition-grid">
+                <dl class="definition-item"><dt>主覆盖率</dt><dd>只有 checked 进入分子。trusted 和 unverified 都留在分母中，所以不会掩盖信任边界和未验证代码。</dd></dl>
+                <dl class="definition-item"><dt>契约覆盖率</dt><dd>表示多少 exec 函数有 requires、ensures、returns、recommends、verus_spec 或 dual_spec；它不代表函数体已被证明。</dd></dl>
+                <dl class="definition-item"><dt>未确认架构</dt><dd>源码已纳入项目进度分母，但对应架构尚未完成整 crate Verus 验证，因此不能显示 checked 百分比。</dd></dl>
+            </div>
+        </section>
+
+        <aside class="warnings" id="warnings" aria-live="polite"></aside>
+    </main>
+
+    <footer>
+        数据来自 <code>verification-progress</code> schema v<span id="schema-version">—</span> · 报告快照 {{BUILD_TIMESTAMP}} · 所有指标均可追溯到嵌入的原始报告
+    </footer>
+
+    <script>
+        {{DATA_PLACEHOLDER}}
+        (() => {
+            "use strict";
+
+            const report = PROGRESS_DATA;
+            const project = report.project || {};
+            const projectMetrics = project.metrics || {};
+            const projectExec = projectMetrics.exec || {};
+            const numberFormat = new Intl.NumberFormat("zh-CN");
+
+            const STATUS = {
+                passed: { label: "已确认", css: "status-passed" },
+                partial: { label: "部分确认", css: "status-partial" },
+                unconfirmed: { label: "未确认", css: "status-unconfirmed" },
+                failed: { label: "验证失败", css: "status-failed" },
+            };
+
+            const KIND_LABELS = {
+                architecture: "架构",
+                package: "包",
+                subsystem: "子系统",
+            };
+
+            const METRIC_LABELS = {
+                all: "全部指标",
+                checked: "包含 checked exec",
+                trusted: "包含 trusted exec",
+                unverified: "包含 unverified exec",
+                proof: "包含 proof 函数",
+                spec: "包含 spec 函数",
+                debt: "包含信任债务",
+            };
+
+            const DEBT_FIELDS = [
+                ["external_body", "external_body", "#bc4c00"],
+                ["external", "external", "#cf222e"],
+                ["external_specifications", "external_*_specification", "#8250df"],
+                ["trusted", "trusted 属性", "#9a6700"],
+                ["axioms", "axiom fn", "#0a7ea4"],
+                ["assumes", "assume", "#d1242f"],
+                ["admits", "admit", "#a40e26"],
+            ];
+
+            const DEFAULT_STATE = {
+                q: "",
+                kind: "all",
+                status: "all",
+                package: "all",
+                metric: "all",
+                sort: "coverage",
+                dir: "desc",
+                page: 1,
+                size: 20,
+                expanded: "",
+            };
+
+            let state = readState();
+            const rows = buildRows();
+
+            function byId(id) {
+                return document.getElementById(id);
+            }
+
+            function asNumber(value, fallback = 0) {
+                return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+            }
+
+            function formatInteger(value) {
+                return typeof value === "number" && Number.isFinite(value)
+                    ? numberFormat.format(value)
+                    : "—";
+            }
+
+            function formatPercent(value, digits = 1) {
+                return typeof value === "number" && Number.isFinite(value)
+                    ? `${value.toFixed(digits)}%`
+                    : "未确认";
+            }
+
+            function formatDate(value) {
+                if (!value) return "—";
+                const date = new Date(value);
+                if (Number.isNaN(date.valueOf())) return String(value);
+                return new Intl.DateTimeFormat("zh-CN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZoneName: "short",
+                }).format(date);
+            }
+
+            function escapeHtml(value) {
+                return String(value ?? "")
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#039;");
+            }
+
+            function clampPercent(value) {
+                return Math.max(0, Math.min(100, asNumber(value)));
+            }
+
+            function percentOf(part, total) {
+                return total > 0 ? clampPercent((asNumber(part) / total) * 100) : 0;
+            }
+
+            function debtTotal(debt) {
+                return DEBT_FIELDS.reduce((total, [key]) => total + asNumber(debt?.[key]), 0);
+            }
+
+            function normalizeStatus(value) {
+                if (value === "passed") return "passed";
+                if (value === "failed" || value === "error") return "failed";
+                if (value === "partially_confirmed" || value === "partial") return "partial";
+                return "unconfirmed";
+            }
+
+            function statusMeta(value) {
+                return STATUS[normalizeStatus(value)] || STATUS.unconfirmed;
+            }
+
+            function statusPill(value) {
+                const meta = statusMeta(value);
+                return `<span class="status-pill ${meta.css}">${meta.label}</span>`;
+            }
+
+            function currentBuildStatus() {
+                if (report.verification?.status === "failed") return "failed";
+                if (report.verification?.status === "passed" && report.verification?.entire_crate) {
+                    return "passed";
+                }
+                return "unconfirmed";
+            }
+
+            function buildRows() {
+                const result = [];
+
+                for (const architecture of report.architectures || []) {
+                    result.push({
+                        id: `arch:${architecture.name}`,
+                        kind: "architecture",
+                        name: architecture.name,
+                        package: "architecture",
+                        role: architecture.role || "",
+                        target: architecture.rustc_target_triple || "",
+                        status: normalizeStatus(architecture.analysis_status),
+                        files: asNumber(architecture.analyzed_files, asNumber(architecture.total_files)),
+                        totalFiles: asNumber(architecture.total_files),
+                        lines: asNumber(architecture.analyzed_lines, architecture.metrics?.lines?.total),
+                        metrics: architecture.metrics || {},
+                        note: architecture.note || "",
+                    });
+                }
+
+                const packageStatus = currentBuildStatus();
+                for (const packageReport of report.packages || []) {
+                    const status = packageReport.analysis_error ? "failed" : packageStatus;
+                    result.push({
+                        id: `pkg:${packageReport.name}`,
+                        kind: "package",
+                        name: packageReport.name,
+                        package: packageReport.name,
+                        role: packageReport.role || "",
+                        target: "",
+                        status,
+                        files: asNumber(packageReport.active_files),
+                        totalFiles: asNumber(packageReport.total_files),
+                        lines: asNumber(packageReport.metrics?.lines?.total, packageReport.active_lines),
+                        metrics: packageReport.metrics || {},
+                        note: packageReport.analysis_error || "",
+                    });
+
+                    for (const subsystem of packageReport.subsystems || []) {
+                        result.push({
+                            id: `sub:${packageReport.name}:${subsystem.name}`,
+                            kind: "subsystem",
+                            name: subsystem.name,
+                            package: packageReport.name,
+                            role: packageReport.role || "",
+                            target: "",
+                            status,
+                            files: asNumber(subsystem.active_files),
+                            totalFiles: asNumber(subsystem.active_files),
+                            lines: asNumber(subsystem.metrics?.lines?.total, subsystem.active_lines),
+                            metrics: subsystem.metrics || {},
+                            note: "",
+                        });
+                    }
+                }
+
+                return result;
+            }
+
+            function renderHeader() {
+                const verification = report.verification || {};
+                const verificationStatus = normalizeStatus(verification.status);
+                const verificationMeta = statusMeta(verificationStatus);
+                const verificationChip = byId("verification-chip");
+                verificationChip.classList.add(verificationStatus === "passed" ? "passed" : "failed");
+                byId("verification-chip-text").textContent =
+                    verificationStatus === "passed" ? "整 crate 验证通过" : verificationMeta.label;
+
+                const commit = report.repository?.commit || "unknown";
+                const shortCommit = commit === "unknown" ? commit : commit.slice(0, 9);
+                byId("commit-chip").textContent = `commit ${shortCommit}${report.repository?.dirty ? " · dirty" : ""}`;
+                byId("commit-chip").title = commit;
+
+                const version = verification.verus?.version || "unknown";
+                byId("verus-chip").textContent = `Verus ${version}`;
+                byId("report-time").textContent = `报告时间 ${formatDate(report.generated_at)}`;
+                byId("schema-version").textContent = report.schema_version ?? "—";
+
+                const projectMeta = statusMeta(project.status);
+                const projectStatus = byId("project-status");
+                projectStatus.className = `status-pill ${projectMeta.css}`;
+                projectStatus.textContent = `项目指标：${projectMeta.label}`;
+            }
+
+            function renderScopeBanner() {
+                const architectures = report.architectures || [];
+                const confirmed = architectures.filter((item) => normalizeStatus(item.analysis_status) === "passed");
+                const unconfirmed = architectures.filter((item) => normalizeStatus(item.analysis_status) === "unconfirmed");
+                const unconfirmedExec = unconfirmed.reduce(
+                    (total, item) => total + asNumber(item.metrics?.exec?.total),
+                    0,
+                );
+                const confirmedNames = confirmed.map((item) => item.name).join("、") || "无";
+                const pendingNames = unconfirmed.map((item) => item.name).join("、") || "无";
+                byId("scope-message").textContent =
+                    `${confirmedNames} 的 checked 来自完整 Verus 构建；${pendingNames} 目前仅完成专属源码静态统计，` +
+                    `${formatInteger(unconfirmedExec)} 个 exec 函数按 unverified 纳入项目分母。`;
+
+                const primary = architectures.find((item) => item.role === "primary") || architectures[0];
+                const projectCoverage = projectExec.coverage_percent;
+                const primaryCoverage = primary?.metrics?.exec?.coverage_percent;
+                const gap = typeof primaryCoverage === "number" && typeof projectCoverage === "number"
+                    ? primaryCoverage - projectCoverage
+                    : null;
+                byId("scope-gap").textContent = gap === null ? "—" : `${gap >= 0 ? "+" : ""}${gap.toFixed(2)} pp`;
+            }
+
+            function renderCoverage() {
+                const checked = projectExec.checked;
+                const trusted = asNumber(projectExec.trusted);
+                const unverified = asNumber(projectExec.unverified);
+                const total = asNumber(projectExec.total);
+                const checkedForBar = typeof checked === "number" ? checked : 0;
+                const unconfirmedCandidates = typeof checked === "number"
+                    ? 0
+                    : asNumber(projectExec.checked_candidates);
+
+                byId("coverage-value").textContent = formatPercent(projectExec.coverage_percent, 2);
+                byId("coverage-count").innerHTML = typeof checked === "number"
+                    ? `<strong>${formatInteger(checked)}</strong> checked / ${formatInteger(total)} total exec`
+                    : `<strong>checked 未确认</strong> / ${formatInteger(total)} total exec`;
+
+                byId("checked-segment").style.width = `${percentOf(checkedForBar, total)}%`;
+                byId("trusted-segment").style.width = `${percentOf(trusted, total)}%`;
+                byId("unverified-segment").style.width = `${percentOf(unverified + unconfirmedCandidates, total)}%`;
+                byId("exec-legend").innerHTML = [
+                    ["segment-checked", "checked", checked],
+                    ["segment-trusted", "trusted", trusted],
+                    ["segment-unverified", "unverified", unverified],
+                ].map(([className, label, value]) =>
+                    `<span class="legend-item"><span class="legend-swatch ${className}"></span>${label} ${formatInteger(value)}</span>`
+                ).join("");
+
+                const coverageMeta = statusMeta(project.status);
+                const coverageStatus = byId("coverage-status");
+                coverageStatus.className = `status-pill ${coverageMeta.css}`;
+                coverageStatus.textContent = coverageMeta.label;
+
+                byId("contract-value").textContent = formatPercent(projectExec.contract_coverage_percent, 2);
+                byId("contract-count").textContent = `${formatInteger(projectExec.specified)} / ${formatInteger(total)} exec`;
+                byId("contract-segment").style.width = `${clampPercent(projectExec.contract_coverage_percent)}%`;
+                byId("source-files").textContent = formatInteger(project.source_files);
+                byId("source-lines").textContent = formatInteger(project.source_lines);
+
+                byId("metric-checked").textContent = formatInteger(checked);
+                byId("metric-trusted").textContent = formatInteger(trusted);
+                byId("metric-unverified").textContent = formatInteger(unverified);
+                byId("metric-proof").textContent = formatInteger(projectMetrics.proof?.total);
+                byId("metric-spec").textContent = formatInteger(projectMetrics.spec?.total);
+                byId("metric-debt").textContent = formatInteger(debtTotal(projectMetrics.trust_debt));
+            }
+
+            function renderArchitectures() {
+                const colors = ["#1a7f37", "#9a6700", "#8250df"];
+                byId("architecture-grid").innerHTML = (report.architectures || []).map((architecture, index) => {
+                    const exec = architecture.metrics?.exec || {};
+                    const status = normalizeStatus(architecture.analysis_status);
+                    const coverage = exec.coverage_percent;
+                    const files = asNumber(architecture.analyzed_files, architecture.total_files);
+                    const totalFiles = asNumber(architecture.total_files);
+                    const lineCount = asNumber(architecture.analyzed_lines, architecture.total_lines);
+                    const fileText = totalFiles && files !== totalFiles
+                        ? `${formatInteger(files)} / ${formatInteger(totalFiles)}`
+                        : formatInteger(files);
+                    const coverageText = typeof coverage === "number"
+                        ? formatPercent(coverage, 2)
+                        : "未确认";
+                    const coverageSubtext = typeof exec.checked === "number"
+                        ? `${formatInteger(exec.checked)} / ${formatInteger(exec.total)} checked`
+                        : `${formatInteger(exec.unverified)} exec 暂按 unverified`;
+                    const progress = typeof coverage === "number"
+                        ? `<div class="simple-track" style="height:7px;margin-top:10px"><span class="segment-checked" style="width:${clampPercent(coverage)}%"></span></div>`
+                        : `<div class="simple-track" style="height:7px;margin-top:10px"><span class="segment-unverified" style="width:100%"></span></div>`;
+
+                    return `
+                        <article class="panel arch-card" style="--arch-color:${colors[index % colors.length]}">
+                            <button class="arch-card-button" type="button" data-architecture="${escapeHtml(architecture.name)}" aria-label="在明细中查看 ${escapeHtml(architecture.name)}">
+                                <div class="arch-head">
+                                    <div><h3 class="arch-name">${escapeHtml(architecture.name)}</h3><div class="arch-target">${escapeHtml(architecture.rustc_target_triple || "—")}</div></div>
+                                    ${statusPill(status)}
+                                </div>
+                                <div class="arch-coverage"><strong>${coverageText}</strong><span>${coverageSubtext}</span></div>
+                                ${progress}
+                                <div class="arch-facts">
+                                    <div class="arch-fact"><strong>${fileText}</strong><span>源码文件</span></div>
+                                    <div class="arch-fact"><strong>${formatInteger(lineCount)}</strong><span>物理代码行</span></div>
+                                    <div class="arch-fact"><strong>${formatInteger(exec.total)}</strong><span>exec 函数</span></div>
+                                </div>
+                            </button>
+                        </article>`;
+                }).join("");
+            }
+
+            function renderTrustDebt() {
+                const debt = projectMetrics.trust_debt || {};
+                const total = debtTotal(debt);
+                const maximum = Math.max(1, ...DEBT_FIELDS.map(([key]) => asNumber(debt[key])));
+                byId("debt-total").textContent = formatInteger(total);
+                byId("debt-list").innerHTML = DEBT_FIELDS.map(([key, label, color]) => {
+                    const value = asNumber(debt[key]);
+                    return `
+                        <div class="bar-row">
+                            <span class="bar-row-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+                            <span class="mini-track" style="--row-color:${color}"><span style="width:${percentOf(value, maximum)}%"></span></span>
+                            <span class="bar-row-value">${formatInteger(value)}</span>
+                        </div>`;
+                }).join("");
+            }
+
+            function renderLines() {
+                const lines = projectMetrics.lines || {};
+                const total = asNumber(lines.total);
+                const known = [
+                    ["trusted", "Trusted", asNumber(lines.trusted), "segment-trusted", "#d4a72c"],
+                    ["spec", "Spec", asNumber(lines.spec), "segment-spec", "#8250df"],
+                    ["proof", "Proof", asNumber(lines.proof), "segment-proof", "#0a7ea4"],
+                    ["exec", "Exec", asNumber(lines.exec), "segment-exec", "#0969da"],
+                ];
+                const accounted = known.reduce((sum, item) => sum + item[2], 0);
+                known.push(["other", "其他", Math.max(0, total - accounted), "segment-other", "#8c959f"]);
+
+                byId("line-total").textContent = `${formatInteger(total)} 行`;
+                byId("line-stack").innerHTML = known.map(([, label, value, className]) =>
+                    `<span class="${className}" style="width:${percentOf(value, total)}%" title="${escapeHtml(label)} ${formatInteger(value)}"></span>`
+                ).join("");
+                byId("line-list").innerHTML = known.map(([, label, value, , color]) => `
+                    <div class="bar-row">
+                        <span class="bar-row-label">${escapeHtml(label)}</span>
+                        <span class="mini-track" style="--row-color:${color}"><span style="width:${percentOf(value, total)}%"></span></span>
+                        <span class="bar-row-value">${formatInteger(value)} · ${formatPercent(percentOf(value, total))}</span>
+                    </div>`).join("");
+            }
+
+            function renderUnsafe() {
+                const unsafe = projectExec.unsafe_functions || {};
+                const total = asNumber(unsafe.total);
+                const checked = typeof unsafe.checked === "number" ? unsafe.checked : 0;
+                const trusted = asNumber(unsafe.trusted);
+                const unverified = asNumber(unsafe.unverified) +
+                    (typeof unsafe.checked === "number" ? 0 : asNumber(unsafe.checked_candidates));
+                byId("unsafe-total").textContent = formatInteger(total);
+                byId("unsafe-stack").innerHTML = `
+                    <span class="segment-checked" style="width:${percentOf(checked, total)}%"></span>
+                    <span class="segment-trusted" style="width:${percentOf(trusted, total)}%"></span>
+                    <span class="segment-unverified" style="width:${percentOf(unverified, total)}%"></span>`;
+                byId("unsafe-legend").innerHTML = [
+                    ["Checked", unsafe.checked, "var(--green)"],
+                    ["Trusted", trusted, "#d4a72c"],
+                    ["Unverified", unsafe.unverified, "var(--red)"],
+                ].map(([label, value, color]) => `
+                    <div class="unsafe-item" style="border-top:3px solid ${color}"><strong>${formatInteger(value)}</strong><span>${label}</span></div>`
+                ).join("");
+            }
+
+            function signed(value, suffix = "") {
+                if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+                return `${value >= 0 ? "+" : ""}${numberFormat.format(value)}${suffix}`;
+            }
+
+            function renderBaseline() {
+                const comparison = report.comparison;
+                if (!comparison) return;
+                byId("baseline-panel").classList.add("visible");
+                byId("baseline-commit").textContent = `基线 commit ${comparison.baseline_commit || "unknown"}`;
+                const items = [
+                    ["源码文件", signed(comparison.source_files_delta)],
+                    ["Exec 总数", signed(comparison.exec_total_delta)],
+                    ["Checked exec", signed(comparison.checked_exec_delta)],
+                    ["覆盖率", signed(comparison.coverage_percentage_points, " pp")],
+                    ["信任债务", signed(comparison.trust_debt_delta)],
+                ];
+                byId("baseline-deltas").innerHTML = items.map(([label, value]) =>
+                    `<div class="delta-item"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`
+                ).join("");
+            }
+
+            function renderWarnings() {
+                const warnings = [
+                    ...(report.warnings || []),
+                    ...(report.comparison?.warnings || []),
+                ];
+                if (!warnings.length) return;
+                const container = byId("warnings");
+                container.classList.add("visible");
+                container.innerHTML = `<strong>报告提示</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`;
+            }
+
+            function populatePackageFilter() {
+                const select = byId("package-filter");
+                const packages = [...new Set(rows.map((row) => row.package))]
+                    .sort((a, b) => a.localeCompare(b, "en"));
+                for (const name of packages) {
+                    const option = document.createElement("option");
+                    option.value = name;
+                    option.textContent = name === "architecture" ? "全部架构" : name;
+                    select.append(option);
+                }
+            }
+
+            function readState() {
+                const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+                const next = { ...DEFAULT_STATE };
+                next.q = params.get("q") || "";
+                next.kind = ["all", "architecture", "package", "subsystem"].includes(params.get("kind"))
+                    ? params.get("kind")
+                    : "all";
+                next.status = ["all", "passed", "unconfirmed", "failed"].includes(params.get("status"))
+                    ? params.get("status")
+                    : "all";
+                next.package = params.get("package") || "all";
+                next.metric = Object.hasOwn(METRIC_LABELS, params.get("metric"))
+                    ? params.get("metric")
+                    : "all";
+                next.sort = ["name", "files", "checked", "trusted", "unverified", "coverage", "contract", "proof", "spec", "debt", "lines"].includes(params.get("sort"))
+                    ? params.get("sort")
+                    : DEFAULT_STATE.sort;
+                next.dir = params.get("dir") === "asc" ? "asc" : "desc";
+                next.page = Math.max(1, Number.parseInt(params.get("page") || "1", 10) || 1);
+                next.size = [20, 50, 100].includes(Number.parseInt(params.get("size"), 10))
+                    ? Number.parseInt(params.get("size"), 10)
+                    : DEFAULT_STATE.size;
+                next.expanded = params.get("expanded") || "";
+                return next;
+            }
+
+            function writeState() {
+                const params = new URLSearchParams();
+                for (const [key, value] of Object.entries(state)) {
+                    if (value === DEFAULT_STATE[key] || value === "") continue;
+                    params.set(key, String(value));
+                }
+                const hash = params.toString();
+                history.replaceState(null, "", `${location.pathname}${location.search}${hash ? `#${hash}` : ""}`);
+            }
+
+            function metricMatches(row) {
+                const metrics = row.metrics || {};
+                switch (state.metric) {
+                    case "checked": return asNumber(metrics.exec?.checked) > 0;
+                    case "trusted": return asNumber(metrics.exec?.trusted) > 0;
+                    case "unverified": return asNumber(metrics.exec?.unverified) > 0;
+                    case "proof": return asNumber(metrics.proof?.total) > 0;
+                    case "spec": return asNumber(metrics.spec?.total) > 0;
+                    case "debt": return debtTotal(metrics.trust_debt) > 0;
+                    default: return true;
+                }
+            }
+
+            function filteredRows() {
+                const query = state.q.trim().toLocaleLowerCase("zh-CN");
+                return rows.filter((row) => {
+                    if (state.kind !== "all" && row.kind !== state.kind) return false;
+                    if (state.status !== "all" && row.status !== state.status) return false;
+                    if (state.package !== "all" && row.package !== state.package) return false;
+                    if (!metricMatches(row)) return false;
+                    if (!query) return true;
+                    return [row.name, row.package, row.role, row.target, KIND_LABELS[row.kind]]
+                        .join(" ")
+                        .toLocaleLowerCase("zh-CN")
+                        .includes(query);
+                });
+            }
+
+            function sortValue(row, key) {
+                const metrics = row.metrics || {};
+                switch (key) {
+                    case "name": return `${row.package}/${row.name}`.toLocaleLowerCase("zh-CN");
+                    case "files": return row.files;
+                    case "checked": return metrics.exec?.checked;
+                    case "trusted": return metrics.exec?.trusted;
+                    case "unverified": return metrics.exec?.unverified;
+                    case "coverage": return metrics.exec?.coverage_percent;
+                    case "contract": return metrics.exec?.contract_coverage_percent;
+                    case "proof": return metrics.proof?.total;
+                    case "spec": return metrics.spec?.total;
+                    case "debt": return debtTotal(metrics.trust_debt);
+                    case "lines": return row.lines;
+                    default: return 0;
+                }
+            }
+
+            function sortedRows(input) {
+                return [...input].sort((left, right) => {
+                    const a = sortValue(left, state.sort);
+                    const b = sortValue(right, state.sort);
+                    const aMissing = a === null || a === undefined || Number.isNaN(a);
+                    const bMissing = b === null || b === undefined || Number.isNaN(b);
+                    if (aMissing && bMissing) return left.id.localeCompare(right.id, "en");
+                    if (aMissing) return 1;
+                    if (bMissing) return -1;
+                    const order = typeof a === "string"
+                        ? a.localeCompare(b, "zh-CN", { numeric: true })
+                        : a - b;
+                    return state.dir === "asc" ? order : -order;
+                });
+            }
+
+            function coverageCell(value) {
+                if (typeof value !== "number" || !Number.isFinite(value)) {
+                    return `<span style="color:var(--amber)">未确认</span>`;
+                }
+                return `<span class="coverage-cell-value"><span class="coverage-mini"><span style="width:${clampPercent(value)}%"></span></span>${formatPercent(value)}</span>`;
+            }
+
+            function renderDetail(row) {
+                const metrics = row.metrics || {};
+                const exec = metrics.exec || {};
+                const proof = metrics.proof || {};
+                const spec = metrics.spec || {};
+                const debt = metrics.trust_debt || {};
+                const lines = metrics.lines || {};
+                const unsafe = exec.unsafe_functions || {};
+                const execChecked = formatInteger(exec.checked);
+                const proofChecked = formatInteger(proof.checked);
+
+                return `
+                    <tr class="detail-row">
+                        <td colspan="13">
+                            <div class="row-detail">
+                                <div class="detail-card">
+                                    <h4>Exec 函数</h4>
+                                    <dl class="detail-list">
+                                        <dt>checked</dt><dd>${execChecked}</dd>
+                                        <dt>checked candidates</dt><dd>${formatInteger(exec.checked_candidates)}</dd>
+                                        <dt>trusted</dt><dd>${formatInteger(exec.trusted)}</dd>
+                                        <dt>unverified</dt><dd>${formatInteger(exec.unverified)}</dd>
+                                        <dt>有契约</dt><dd>${formatInteger(exec.specified)}</dd>
+                                        <dt>unsafe total</dt><dd>${formatInteger(unsafe.total)}</dd>
+                                    </dl>
+                                </div>
+                                <div class="detail-card">
+                                    <h4>Proof / Spec</h4>
+                                    <dl class="detail-list">
+                                        <dt>proof checked</dt><dd>${proofChecked}</dd>
+                                        <dt>proof trusted</dt><dd>${formatInteger(proof.trusted)}</dd>
+                                        <dt>axiom fn</dt><dd>${formatInteger(proof.axioms)}</dd>
+                                        <dt>proof total</dt><dd>${formatInteger(proof.total)}</dd>
+                                        <dt>spec defined</dt><dd>${formatInteger(spec.defined)}</dd>
+                                        <dt>uninterp spec</dt><dd>${formatInteger(spec.uninterpreted)}</dd>
+                                    </dl>
+                                </div>
+                                <div class="detail-card">
+                                    <h4>信任债务</h4>
+                                    <dl class="detail-list">
+                                        ${DEBT_FIELDS.map(([key, label]) => `<dt>${escapeHtml(label)}</dt><dd>${formatInteger(debt[key])}</dd>`).join("")}
+                                    </dl>
+                                </div>
+                                <div class="detail-card">
+                                    <h4>代码行与范围</h4>
+                                    <dl class="detail-list">
+                                        <dt>Trusted 行</dt><dd>${formatInteger(lines.trusted)}</dd>
+                                        <dt>Spec 行</dt><dd>${formatInteger(lines.spec)}</dd>
+                                        <dt>Proof 行</dt><dd>${formatInteger(lines.proof)}</dd>
+                                        <dt>Exec 行</dt><dd>${formatInteger(lines.exec)}</dd>
+                                        <dt>物理行总数</dt><dd>${formatInteger(lines.total)}</dd>
+                                        <dt>源码文件</dt><dd>${formatInteger(row.files)}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>`;
+            }
+
+            function renderTable() {
+                const filtered = sortedRows(filteredRows());
+                const pages = Math.max(1, Math.ceil(filtered.length / state.size));
+                state.page = Math.min(state.page, pages);
+                const start = (state.page - 1) * state.size;
+                const current = filtered.slice(start, start + state.size);
+
+                byId("detail-body").innerHTML = current.map((row) => {
+                    const metrics = row.metrics || {};
+                    const exec = metrics.exec || {};
+                    const expanded = state.expanded === row.id;
+                    const fileText = row.totalFiles > row.files
+                        ? `${formatInteger(row.files)}/${formatInteger(row.totalFiles)}`
+                        : formatInteger(row.files);
+                    const meta = [KIND_LABELS[row.kind], row.kind === "subsystem" ? row.package : row.role]
+                        .filter(Boolean)
+                        .join(" · ");
+                    const rowHtml = `
+                        <tr class="data-row${expanded ? " expanded" : ""}" data-row-id="${escapeHtml(row.id)}">
+                            <td><button class="expand-button" type="button" data-expand="${escapeHtml(row.id)}" aria-expanded="${expanded}" aria-label="${expanded ? "收起" : "展开"} ${escapeHtml(row.name)}">${expanded ? "⌄" : "›"}</button></td>
+                            <td class="scope-cell"><div class="scope-name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div class="scope-meta">${escapeHtml(meta)}</div></td>
+                            <td>${statusPill(row.status)}</td>
+                            <td>${fileText}</td>
+                            <td class="number-checked">${formatInteger(exec.checked)}</td>
+                            <td class="number-trusted">${formatInteger(exec.trusted)}</td>
+                            <td class="number-unverified">${formatInteger(exec.unverified)}</td>
+                            <td class="coverage-cell">${coverageCell(exec.coverage_percent)}</td>
+                            <td>${formatPercent(exec.contract_coverage_percent)}</td>
+                            <td>${formatInteger(metrics.proof?.total)}</td>
+                            <td>${formatInteger(metrics.spec?.total)}</td>
+                            <td class="number-debt">${formatInteger(debtTotal(metrics.trust_debt))}</td>
+                            <td>${formatInteger(row.lines)}</td>
+                        </tr>`;
+                    return rowHtml + (expanded ? renderDetail(row) : "");
+                }).join("");
+
+                byId("empty-state").hidden = filtered.length !== 0;
+                byId("result-count").textContent = filtered.length
+                    ? `显示 ${formatInteger(start + 1)}–${formatInteger(Math.min(start + state.size, filtered.length))}，共 ${formatInteger(filtered.length)} 个范围`
+                    : "0 个范围";
+                byId("page-text").textContent = `第 ${state.page} / ${pages} 页`;
+                byId("prev-page").disabled = state.page <= 1;
+                byId("next-page").disabled = state.page >= pages;
+
+                document.querySelectorAll(".sort-button").forEach((button) => {
+                    const indicator = button.querySelector(".sort-indicator");
+                    const active = button.dataset.sort === state.sort;
+                    indicator.textContent = active ? (state.dir === "asc" ? "▲" : "▼") : "↕";
+                    button.closest("th").setAttribute("aria-sort", active
+                        ? (state.dir === "asc" ? "ascending" : "descending")
+                        : "none");
+                });
+
+                syncControls();
+                writeState();
+            }
+
+            function syncControls() {
+                byId("search-input").value = state.q;
+                byId("kind-filter").value = state.kind;
+                byId("status-filter").value = state.status;
+                const packageSelect = byId("package-filter");
+                packageSelect.value = [...packageSelect.options].some((option) => option.value === state.package)
+                    ? state.package
+                    : "all";
+                if (packageSelect.value === "all" && state.package !== "all") state.package = "all";
+                byId("page-size").value = String(state.size);
+
+                document.querySelectorAll(".metric-card").forEach((card) => {
+                    const active = card.dataset.metric === state.metric;
+                    card.classList.toggle("active", active);
+                    card.setAttribute("aria-pressed", String(active));
+                });
+
+                const filter = byId("active-filter");
+                filter.classList.toggle("visible", state.metric !== "all");
+                byId("active-filter-text").textContent = state.metric === "all"
+                    ? ""
+                    : `明细表当前只显示：${METRIC_LABELS[state.metric]}`;
+            }
+
+            function resetFilters() {
+                state = { ...DEFAULT_STATE };
+                renderTable();
+            }
+
+            function bindEvents() {
+                byId("search-input").addEventListener("input", (event) => {
+                    state.q = event.target.value;
+                    state.page = 1;
+                    renderTable();
+                });
+                byId("kind-filter").addEventListener("change", (event) => {
+                    state.kind = event.target.value;
+                    state.page = 1;
+                    renderTable();
+                });
+                byId("status-filter").addEventListener("change", (event) => {
+                    state.status = event.target.value;
+                    state.page = 1;
+                    renderTable();
+                });
+                byId("package-filter").addEventListener("change", (event) => {
+                    state.package = event.target.value;
+                    state.page = 1;
+                    renderTable();
+                });
+                byId("page-size").addEventListener("change", (event) => {
+                    state.size = Number.parseInt(event.target.value, 10);
+                    state.page = 1;
+                    renderTable();
+                });
+                byId("prev-page").addEventListener("click", () => {
+                    state.page = Math.max(1, state.page - 1);
+                    renderTable();
+                });
+                byId("next-page").addEventListener("click", () => {
+                    state.page += 1;
+                    renderTable();
+                });
+                byId("reset-button").addEventListener("click", resetFilters);
+                byId("clear-metric").addEventListener("click", () => {
+                    state.metric = "all";
+                    state.page = 1;
+                    renderTable();
+                });
+
+                document.querySelectorAll(".metric-card").forEach((card) => {
+                    card.addEventListener("click", () => {
+                        state.metric = state.metric === card.dataset.metric ? "all" : card.dataset.metric;
+                        state.page = 1;
+                        renderTable();
+                        byId("detail-heading").scrollIntoView({ block: "start" });
+                    });
+                });
+
+                document.querySelectorAll(".sort-button").forEach((button) => {
+                    button.addEventListener("click", () => {
+                        const key = button.dataset.sort;
+                        if (state.sort === key) {
+                            state.dir = state.dir === "asc" ? "desc" : "asc";
+                        } else {
+                            state.sort = key;
+                            state.dir = key === "name" ? "asc" : "desc";
+                        }
+                        state.page = 1;
+                        renderTable();
+                    });
+                });
+
+                byId("detail-body").addEventListener("click", (event) => {
+                    const button = event.target.closest("[data-expand]");
+                    if (!button) return;
+                    state.expanded = state.expanded === button.dataset.expand ? "" : button.dataset.expand;
+                    renderTable();
+                });
+
+                byId("architecture-grid").addEventListener("click", (event) => {
+                    const button = event.target.closest("[data-architecture]");
+                    if (!button) return;
+                    state = {
+                        ...state,
+                        q: button.dataset.architecture,
+                        kind: "architecture",
+                        package: "architecture",
+                        page: 1,
+                    };
+                    renderTable();
+                    byId("detail-heading").scrollIntoView({ block: "start" });
+                });
+
+                window.addEventListener("hashchange", () => {
+                    state = readState();
+                    renderTable();
+                });
+            }
+
+            function initialize() {
+                renderHeader();
+                renderScopeBanner();
+                renderCoverage();
+                renderArchitectures();
+                renderTrustDebt();
+                renderLines();
+                renderUnsafe();
+                renderBaseline();
+                renderWarnings();
+                populatePackageFilter();
+                bindEvents();
+                renderTable();
+            }
+
+            initialize();
+        })();
+    </script>
+</body>
+</html>
