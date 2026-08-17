@@ -38,6 +38,8 @@ pub mod arch;
 //#[path = "arch/riscv/mod.rs"]
 //pub mod arch;
 pub mod boot;
+#[cfg(verus_keep_ghost)]
+pub mod bus;
 /*pub mod bus;
 pub mod console;
 pub mod cpu;*/
