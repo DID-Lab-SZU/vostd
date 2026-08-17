@@ -49,3 +49,20 @@ impl<L, R> Either<L, R> {
     // TODO: Add other utility methods (e.g. `as_ref`, `as_mut`) as needed.
     // As a good reference, check what methods `Result` provides.
 }
+
+verus! {
+
+impl<L, R> Either<L, R> {
+    /// Proves that exactly one of the two variants is present.
+    pub proof fn lemma_is_left_iff_not_is_right(&self)
+        ensures
+            self.is_left() == !self.is_right(),
+    {
+        match self {
+            Self::Left(_) => {},
+            Self::Right(_) => {},
+        }
+    }
+}
+
+} // verus!

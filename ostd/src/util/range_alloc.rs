@@ -180,16 +180,42 @@ impl RangeAllocator {
         }
     }
 
-    #[verifier::external_body]
+    #[verus_spec(ret =>
+        with
+            -> old_freelist: Ghost<Option<FreeListModel>>,
+        requires
+            self@.start < self@.end,
+        ensures
+            ret@ is Some,
+            old_freelist@ is None ==> freelist_model(ret@->Some_0)
+                == Map::empty().insert(self.fullrange.start, self@),
+            old_freelist@ is Some ==> freelist_model(ret@->Some_0)
+                == old_freelist@->Some_0,
+            old_freelist@ is None ==> freelist_wf(freelist_model(ret@->Some_0), self@),
+            old_freelist@ is Some && freelist_wf(old_freelist@->Some_0, self@)
+                ==> freelist_wf(freelist_model(ret@->Some_0), self@),
+    )]
     fn get_freelist_guard(
         &self,
     ) -> SpinLockGuard<Option<BTreeMap<usize, FreeRange>>, PreemptDisabled> {
         let mut lock_guard = self.freelist.lock();
+        proof_decl! {
+            let ghost old_freelist = match lock_guard@ {
+                None => None,
+                Some(freelist) => Some(freelist_model(freelist)),
+            };
+        }
         if lock_guard.is_none() {
             let mut freelist: BTreeMap<usize, FreeRange> = BTreeMap::new();
             freelist.insert(self.fullrange.start, FreeRange::new(self.fullrange.clone()));
             *lock_guard = Some(freelist);
         }
+        proof! {
+            if old_freelist is None {
+                reveal(freelist_model);
+            }
+        }
+        proof_with!(|= Ghost(old_freelist));
         lock_guard
     }
 }
@@ -210,3 +236,46 @@ impl FreeRange {
         Self { block: range }
     }
 }
+
+verus! {
+
+impl View for FreeRange {
+    type V = Range<int>;
+
+    closed spec fn view(&self) -> Range<int> {
+        Range { start: self.block.start as int, end: self.block.end as int }
+    }
+}
+
+type FreeListModel = Map<usize, Range<int>>;
+
+closed spec fn freelist_model(freelist: BTreeMap<usize, FreeRange>) -> FreeListModel {
+    Map::new(freelist@.dom(), |key: usize| (freelist@[key])@)
+}
+
+closed spec fn range_set(range: Range<int>) -> Set<int> {
+    vstd::set_lib::set_int_range(range.start, range.end)
+}
+
+closed spec fn free_set(freelist: FreeListModel) -> Set<int> {
+    freelist.dom().map(|key: usize| range_set(freelist[key])).flatten()
+}
+
+closed spec fn freelist_wf(freelist: FreeListModel, fullrange: Range<int>) -> bool {
+    &&& fullrange.start <= fullrange.end
+    &&& forall|key: usize| #[trigger]
+        freelist.dom().contains(key) ==> {
+            let block = freelist[key];
+            &&& key as int == block.start
+            &&& block.start < block.end
+            &&& fullrange.start <= block.start
+            &&& block.end <= fullrange.end
+        }
+    &&& forall|left_key: usize, right_key: usize|
+        #![trigger freelist.dom().contains(left_key), freelist.dom().contains(right_key)]
+        freelist.dom().contains(left_key) && freelist.dom().contains(right_key) && left_key
+            != right_key ==> freelist[left_key].end < freelist[right_key].start
+            || freelist[right_key].end < freelist[left_key].start
+}
+
+} // verus!
