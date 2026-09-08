@@ -49,6 +49,9 @@ pub const NR_LEVELS: usize = 4;
 /// Width of canonical virtual addresses used by the current configuration.
 pub const ADDRESS_WIDTH: usize = 48;
 
+/// Exclusive upper bound of physical addresses encodable by an x86-64 PTE.
+pub const MAX_ARCH_PADDR: Paddr = 0x10_0000_0000_0000;
+
 /// Highest level at which a PTE may directly map a page.
 pub const HIGHEST_TRANSLATION_LEVEL: PagingLevel = 2;
 
@@ -695,7 +698,7 @@ impl PageTableEntryTrait for PageTableEntry {
                     - 1) as usize))
                 &&& (paddr < MAX_PADDR && paddr % PAGE_SIZE == 0 ==> Self::new_pt(paddr).paddr()
                     == paddr)
-                &&& forall|level: PagingLevel| !Self::new_pt(paddr).is_last(level)
+                &&& forall|level: PagingLevel| 1 < level ==> !Self::new_pt(paddr).is_last(level)
             }
         by {
             let flags = PageTableFlags::PRESENT().bits() | PageTableFlags::WRITABLE().bits()
@@ -717,7 +720,7 @@ impl PageTableEntryTrait for PageTableEntry {
                     Self::PHYS_ADDR_MASK == 0xF_FFFF_FFFF_F000usize,
                     flags == 0x7usize,
                     PageTableFlags::PRESENT().bits() == 0x1usize;
-            assert forall|level: PagingLevel| !Self::new_pt(paddr).is_last(level) by {
+            assert forall|level: PagingLevel| 1 < level implies !Self::new_pt(paddr).is_last(level) by {
                 assert((paddr & Self::PHYS_ADDR_MASK | flags) & PageTableFlags::HUGE().bits()
                     == 0) by (bit_vector)
                     requires

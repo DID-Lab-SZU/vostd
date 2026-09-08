@@ -85,6 +85,8 @@ irc11 = ["vstd_extra/irc11"]
 # The guest OS support for Confidential VMs (CVMs), e.g., Intel TDX
 cvm_guest = ["dep:tdx-guest", "dep:iced-x86"]
 coverage = ["minicov"]
+# Verify RISC-V paging without the unverified boot and device subsystems.
+riscv_paging_verification = []
 
 [lints]
 workspace = true

@@ -99,6 +99,10 @@ jobs:
             echo "Verification passed"
           fi
 
+      - name: Verify RISC-V paging
+        id: riscv
+        run: make verify-riscv
+
       - name: Publish summary
         if: always()
         shell: bash
@@ -110,4 +114,5 @@ jobs:
             else
               echo "- Verification: ✅ passed"
             fi
+            echo "- RISC-V paging: ${{ steps.riscv.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"

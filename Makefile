@@ -31,3 +31,7 @@ verus-upgrade:
 clean:
 	cargo clean
 	rm -rf doc
+
+.PHONY: verify-riscv
+verify-riscv:
+	cargo dv verify --targets ostd --target riscv64imac-unknown-none-elf --features riscv_paging_verification

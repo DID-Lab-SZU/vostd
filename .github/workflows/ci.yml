@@ -118,6 +118,10 @@ jobs:
             echo "✅ Verification passed!"
           fi
 
+      - name: Verify RISC-V paging
+        id: riscv
+        run: make verify-riscv
+
       - name: Check for verification warnings
         if: always()
         run: |
@@ -179,4 +183,5 @@ jobs:
             else
               echo "- Verification warnings: ✅ none"
             fi
+            echo "- RISC-V paging: ${{ steps.riscv.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"
