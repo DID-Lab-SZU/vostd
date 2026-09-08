@@ -13,16 +13,16 @@ use vstd::prelude::*;
 
 use vstd::vpanic;
 
-use crate::arch::mm::{PageTableEntry, PagingConsts, current_page_table_paddr};
+use crate::arch::mm::{current_page_table_paddr, PageTableEntry, PagingConsts};
 use crate::error::Error;
-use crate::mm::frame::MetaSlot;
 use crate::mm::frame::meta::mapping::meta_to_frame;
 use crate::mm::frame::untyped::UFrame;
+use crate::mm::frame::MetaSlot;
 use crate::mm::kspace::KernelPtConfig;
 use crate::mm::page_table::*;
 use crate::mm::{
-    KERNEL_VADDR_RANGE,
     page_table::{EntryOwner, PageTableFrag, PageTableGuard},
+    KERNEL_VADDR_RANGE,
 };
 use crate::specs::arch::*;
 
@@ -45,9 +45,9 @@ use crate::mm::tlb::*;
 use crate::specs::mm::cpu::{AtomicCpuSet, CpuSet};
 
 use crate::mm::{
-    CurrentPagingConstsTrait, MAX_USERSPACE_VADDR, Paddr, PagingConstsTrait, PagingLevel, Vaddr,
     io::{Fallible, VmReader, VmWriter},
     page_prop::PageProperty,
+    CurrentPagingConstsTrait, Paddr, PagingConstsTrait, PagingLevel, Vaddr, MAX_USERSPACE_VADDR,
 };
 use crate::specs::mm::io::VmIoOwner;
 
@@ -350,6 +350,8 @@ impl<'a> VmSpace<'a> {
     /// # Verified Properties
     /// ## Preconditions
     /// - The [`VmSpaceOwner`] invariant must hold.
+    /// - On LoongArch, PGDL and PGDH must agree before reading the active root
+    ///   (`current_page_table_read_req`); CSR access remains a trusted boundary.
     /// ## Postconditions
     /// - When [`Self::reader_success_cond`] holds, the result is `Ok`.
     /// - On success, the [`VmReader`] and its [`VmIoOwner`] are well-formed with no memory view.
@@ -364,6 +366,7 @@ impl<'a> VmSpace<'a> {
                 -> reader_owner: Tracked<Option<VmIoOwner>>,
         requires
             old(owner).inv(),
+            current_page_table_read_req(),
         ensures
             final(owner).inv(),
             self.reader_success_cond(vaddr, len) ==> r is Ok && reader_owner@ is Some,
@@ -409,6 +412,8 @@ impl<'a> VmSpace<'a> {
     /// # Verified Properties
     /// ## Preconditions
     /// - The [`VmSpaceOwner`] invariant must hold.
+    /// - On LoongArch, PGDL and PGDH must agree before reading the active root
+    ///   (`current_page_table_read_req`); CSR access remains a trusted boundary.
     /// ## Postconditions
     /// - When [`Self::writer_success_cond`] holds, the result is `Ok`.
     /// - On success, the [`VmWriter`] and its [`VmIoOwner`] are well-formed with no memory view.
@@ -423,6 +428,7 @@ impl<'a> VmSpace<'a> {
                 -> writer_owner: Tracked<Option<VmIoOwner>>,
         requires
             old(owner).inv(),
+            current_page_table_read_req(),
         ensures
             final(owner).inv(),
             self.writer_success_cond(vaddr, len) ==> r is Ok && writer_owner@ is Some,

@@ -87,6 +87,8 @@ cvm_guest = ["dep:tdx-guest", "dep:iced-x86"]
 coverage = ["minicov"]
 # Verify RISC-V paging without the unverified boot and device subsystems.
 riscv_paging_verification = []
+# Verify LoongArch paging without unverified boot and device subsystems.
+loongarch_paging_verification = []
 
 [lints]
 workspace = true

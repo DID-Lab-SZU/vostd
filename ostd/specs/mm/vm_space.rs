@@ -11,9 +11,9 @@ use crate::specs::{
         frame::meta_region_owners::MetaRegionOwners,
         io::{VmIoMemView, VmIoOwner},
         page_table::{
-            Mapping, OwnerSubtree,
-            cursor::{CursorView, owners::CursorOwner},
+            cursor::{owners::CursorOwner, CursorView},
             node::entry_owners::EntryOwner,
+            Mapping, OwnerSubtree,
         },
         virt_mem::MemView,
     },
@@ -22,13 +22,13 @@ use crate::specs::{
 
 use crate::arch::mm::current_page_table_paddr;
 use crate::mm::{
-    MAX_USERSPACE_VADDR, Paddr, PagingConstsTrait, PagingLevel, Vaddr,
     frame::untyped::UFrame,
     io::{VmReader, VmWriter},
     page_prop::PageProperty,
     page_size,
     page_table::*,
     vm_space::{Cursor, CursorMut, MappedItem, UserPtConfig, VmSpace},
+    Paddr, PagingConstsTrait, PagingLevel, Vaddr, MAX_USERSPACE_VADDR,
 };
 
 verus! {
@@ -682,6 +682,7 @@ impl<'a> VmSpace<'a> {
         len: usize,
     ) -> bool {
         &&& vm_owner.inv()
+        &&& crate::specs::arch::current_page_table_read_req()
     }
 
     pub open spec fn writer_success_cond(self, vaddr: Vaddr, len: usize) -> bool {

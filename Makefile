@@ -35,3 +35,7 @@ clean:
 .PHONY: verify-riscv
 verify-riscv:
 	cargo dv verify --targets ostd --target riscv64imac-unknown-none-elf --features riscv_paging_verification
+
+.PHONY: verify-loongarch
+verify-loongarch:
+	cargo dv verify --targets ostd --target loongarch64-unknown-none-softfloat --features loongarch_paging_verification

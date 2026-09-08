@@ -13,28 +13,28 @@ use core::ops::Range;
 
 use super::{
     FRAME_METADATA_BASE_VADDR, KERNEL_BASE_VADDR, KERNEL_END_VADDR, KERNEL_PAGE_TABLE,
-    VMALLOC_VADDR_RANGE,
+    VMALLOC_BASE_VADDR, VMALLOC_VADDR_RANGE,
 };
 use crate::mm::{
-    PAGE_SIZE, Paddr, Vaddr,
-    frame::{Frame, Segment, untyped::AnyUFrameMeta},
+    frame::{untyped::AnyUFrameMeta, Frame, Segment},
     kspace::{KernelPtConfig, MappedItem},
     largest_pages,
     page_prop::PageProperty,
     page_size,
     page_table::{Child, CursorMut, PageTable, PageTableConfig},
+    Paddr, Vaddr, PAGE_SIZE,
 };
 
 use crate::arch::mm::PagingConsts;
-use crate::mm::frame::DynFrame;
 use crate::mm::frame::meta::{REF_COUNT_MAX, REF_COUNT_UNUSED};
+use crate::mm::frame::DynFrame;
 use crate::mm::kspace::AnyFrameMeta;
 use crate::mm::nr_subpage_per_huge;
 use crate::mm::page_table::PageTableGuard;
 use crate::mm::{PagingConstsTrait, PagingLevel};
 use crate::specs::arch::*;
 use crate::specs::mm::frame::mapping::frame_to_index;
-use crate::specs::mm::frame::meta_owners::{MetaSlotStorage, PageUsage, is_mmio_paddr};
+use crate::specs::mm::frame::meta_owners::{is_mmio_paddr, MetaSlotStorage, PageUsage};
 use crate::specs::mm::frame::meta_region_owners::MetaRegionOwners;
 use crate::specs::mm::page_table::*;
 use crate::specs::mm::page_table::{
@@ -223,47 +223,62 @@ pub uninterp spec fn kvirt_alloc_spec(size: usize) -> Result<
     RangeAllocError,
 >;
 
-pub axiom fn kvirt_alloc_range_bounds(
+/// Trusted bounds of successful, page-aligned allocations from the vmalloc region.
+/// The allocator remains unverified; caller offsets are not part of its contract.
+pub axiom fn axiom_kvirt_alloc_range_bounds(area_size: usize, r: core::ops::Range<Vaddr>)
+    requires
+        area_size % PAGE_SIZE == 0,
+    ensures
+        kvirt_alloc_spec(area_size) == Ok::<core::ops::Range<Vaddr>, RangeAllocError>(r) ==> {
+            &&& VMALLOC_BASE_VADDR <= r.start <= r.end <= FRAME_METADATA_BASE_VADDR
+            &&& r.end - r.start == area_size
+            &&& r.start % PAGE_SIZE == 0
+            &&& r.end % PAGE_SIZE == 0
+        },
+;
+
+/// An in-bounds offset remains inside a successful vmalloc allocation.
+///
+/// # Preconditions
+/// The allocation size is page-aligned and the offset does not exceed it.
+/// # Postconditions
+/// Successful allocations have aligned kernel bounds and nonoverflowing offset arithmetic.
+pub proof fn lemma_kvirt_alloc_range_bounds(
     area_size: usize,
     map_offset: usize,
     r: core::ops::Range<Vaddr>,
 )
+    requires
+        area_size % PAGE_SIZE == 0,
+        map_offset <= area_size,
     ensures
-        kvirt_alloc_spec(area_size) == Ok::<core::ops::Range<Vaddr>, RangeAllocError>(r) ==> r.start
-            <= r.end
-        // **Phase C: tightened to equality.** Page-aligned `area_size`
-        // requests get back exactly `area_size` bytes — the kvirt
-        // allocator does not over-allocate. This pins
-        // `cursor.barrier_va.end - cursor.barrier_va.start = area_size`
-        // so the per-iteration capacity check
-        // `cursor.0.va < cursor.0.barrier_va.end` in `map_frames` is
-        // soundly bridged to a caller-side
-        // `map_offset + frames·PAGE_SIZE <= area_size` precondition.
-         && (r.end - r.start) == area_size && map_offset <= r.end - r.start && r.start + map_offset
-            <= usize::MAX && r.start % PAGE_SIZE == 0 && r.end % PAGE_SIZE == 0 && KERNEL_BASE_VADDR
-            <= r.start
-        // The allocator draws from `VMALLOC_VADDR_RANGE = [VMALLOC_BASE_VADDR,
-        // FRAME_METADATA_BASE_VADDR)`, so `r.end` is bounded by
-        // `FRAME_METADATA_BASE_VADDR` — not the much looser
-        // `KERNEL_END_VADDR`. This leaves a large safety margin
-        // (~64 GB) below `KERNEL_END_VADDR`, so any one-page cursor
-        // open at `[end, end + PAGE_SIZE)` stays within the
-        // kernel-managed range.
-         && r.end <= FRAME_METADATA_BASE_VADDR,
-;
+        kvirt_alloc_spec(area_size) == Ok::<core::ops::Range<Vaddr>, RangeAllocError>(r) ==> {
+            &&& 0 < r.start
+            &&& KERNEL_BASE_VADDR <= r.start
+            &&& VMALLOC_BASE_VADDR <= r.start <= r.end <= FRAME_METADATA_BASE_VADDR
+            &&& r.end - r.start == area_size
+            &&& map_offset <= r.end - r.start
+            &&& r.start + map_offset <= r.end
+            &&& r.start % PAGE_SIZE == 0
+            &&& r.end % PAGE_SIZE == 0
+        },
+{
+    axiom_kvirt_alloc_range_bounds(area_size, r);
+    assert(0 < KERNEL_BASE_VADDR <= VMALLOC_BASE_VADDR) by (compute_only);
+}
 
-/// Kernel ranges within [KERNEL_BASE_VADDR, KERNEL_END_VADDR] with alignment are valid for
-/// KernelPtConfig (which uses sign-extended high-half addresses).
+/// Aligned vmalloc ranges lie in the page table's sign-extended high half.
+/// LoongArch's broader kernel address space also includes direct-map windows.
 pub proof fn lemma_kernel_range_valid(r: core::ops::Range<Vaddr>)
     requires
-        KERNEL_BASE_VADDR <= r.start < r.end <= KERNEL_END_VADDR,
+        VMALLOC_BASE_VADDR <= r.start < r.end <= KERNEL_END_VADDR,
         r.start % PAGE_SIZE == 0,
         r.end % PAGE_SIZE == 0,
     ensures
         is_valid_range_spec::<KernelPtConfig>(r),
 {
     lemma_vaddr_range_spec_kernel();
-    assert(KERNEL_BASE_VADDR == 0xFFFF_8000_0000_0000usize) by (compute_only);
+    assert(0xFFFF_8000_0000_0000usize <= VMALLOC_BASE_VADDR) by (compute_only);
 }
 
 /// Kernel virtual area.
@@ -306,13 +321,13 @@ impl Inv for KVirtArea {
     open spec fn inv(self) -> bool {
         &&& KERNEL_BASE_VADDR
             <= self.range.start
-        // See `kvirt_alloc_range_bounds`: the real allocator draws from
+        // See `lemma_kvirt_alloc_range_bounds`: the real allocator draws from
         // VMALLOC, whose upper bound is FRAME_METADATA_BASE_VADDR. This
         // leaves `end + PAGE_SIZE <= KERNEL_END_VADDR` with plenty of
         // margin, so a one-past-end cursor open stays sound.
         &&& self.range.end
             <= FRAME_METADATA_BASE_VADDR
-        // Page alignment: guaranteed by `kvirt_alloc_range_bounds` at
+        // Page alignment: guaranteed by `lemma_kvirt_alloc_range_bounds` at
         // construction, preserved by every operation (no op touches range).
         &&& self.range.start % PAGE_SIZE == 0
         &&& self.range.end % PAGE_SIZE == 0
@@ -429,6 +444,17 @@ impl KVirtArea {
     ///  - the area size is not a multiple of [`PAGE_SIZE`];
     ///  - the map offset is not aligned to [`PAGE_SIZE`];
     ///  - the map offset plus the size of the pages exceeds the area size.
+    ///
+    /// # Verified Properties
+    /// ## Safety
+    /// Mapping requires the supplied frame, page-table, and metadata ownership.
+    /// Allocation remains a trusted boundary.
+    /// ## Preconditions
+    /// Size and offset are page-aligned, the offset is strictly below the area
+    /// size, and all frames fit. These bounds must hold even when panic is allowed.
+    /// Allocation failure retains its separate `may_panic` obligation.
+    /// ## Postconditions
+    /// On normal return, the bounds and allocation-failure conditions are false.
     #[verus_spec(res =>
         with Tracked(owner): Tracked<KVirtAreaOwner>,
              Tracked(root_guard): Tracked<PageTableGuard<'a, KernelPtConfig>>,
@@ -436,8 +462,7 @@ impl KVirtArea {
              Tracked(regions): Tracked<&mut MetaRegionOwners>,
              Tracked(guards): Tracked<&mut Guards<'a>>,
         requires
-            Self::map_frames_bounds_panic_condition(area_size, map_offset, frames.len())
-                ==> may_panic(),
+            !Self::map_frames_bounds_panic_condition(area_size, map_offset, frames.len()),
             kvirt_alloc_oom_condition(area_size) ==> may_panic(),
             old(regions).inv(),
             owner.inv(),
@@ -479,10 +504,8 @@ impl KVirtArea {
         let range_res = KVIRT_AREA_ALLOCATOR.alloc(area_size);
         assert!(range_res.is_ok());
         let range = range_res.unwrap();
-        assume(range.end > 0);
-
         proof {
-            kvirt_alloc_range_bounds(area_size, map_offset, range);
+            lemma_kvirt_alloc_range_bounds(area_size, map_offset, range);
         }
 
         let cursor_range = range.start + map_offset..range.end;
@@ -771,6 +794,7 @@ impl KVirtArea {
             Self::untracked_range_slots_in_regions(&pa_range, *old(regions)),
             map_offset + vstd_extra::external::range::range_usize_len(&pa_range) <= usize::MAX,
             forall|pa: Paddr, level: PagingLevel|
+                1 <= level <= KernelPtConfig::HIGHEST_TRANSLATION_LEVEL() ==>
                 #[trigger]
                 <crate::arch::mm::PageTableEntry as crate::mm::page_table::PageTableEntryTrait>::new_page_req(
                     pa,
@@ -796,7 +820,7 @@ impl KVirtArea {
         let range = range_res.unwrap();
 
         proof {
-            kvirt_alloc_range_bounds(area_size, map_offset, range);
+            lemma_kvirt_alloc_range_bounds(area_size, map_offset, range);
         }
 
         if pa_range.start < pa_range.end {

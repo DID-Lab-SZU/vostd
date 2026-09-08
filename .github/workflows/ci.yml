@@ -122,6 +122,10 @@ jobs:
         id: riscv
         run: make verify-riscv
 
+      - name: Verify LoongArch paging
+        id: loongarch
+        run: make verify-loongarch
+
       - name: Check for verification warnings
         if: always()
         run: |
@@ -184,4 +188,5 @@ jobs:
               echo "- Verification warnings: ✅ none"
             fi
             echo "- RISC-V paging: ${{ steps.riscv.outcome }}"
+            echo "- LoongArch paging: ${{ steps.loongarch.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"

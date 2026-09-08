@@ -1,22 +1,23 @@
 use vstd::{
-    arithmetic::power2::{lemma_pow2_adds, lemma2_to64, lemma2_to64_rest, pow2},
+    arithmetic::power2::{lemma2_to64, lemma2_to64_rest, lemma_pow2_adds, pow2},
     prelude::*,
 };
 use vstd_extra::prelude::*;
 
 use super::{
-    CurrentArch,
     model::{self, ArchAddressSpaceModel},
+    CurrentArch,
 };
 
 use crate::{
     arch::mm::{NR_ENTRIES, PAGE_SIZE},
     mm::{
-        CurrentPagingConstsTrait, MAX_NR_PAGES, MAX_PADDR, Paddr, Vaddr,
-        frame::meta::{META_SLOT_SIZE, mapping::meta_to_frame},
+        frame::meta::{mapping::meta_to_frame, META_SLOT_SIZE},
         kspace::{
-            FRAME_METADATA_RANGE, LINEAR_MAPPING_BASE_VADDR, VMALLOC_BASE_VADDR, paddr_to_vaddr,
+            paddr_to_vaddr, FRAME_METADATA_RANGE, KERNEL_BASE_VADDR, LINEAR_MAPPING_BASE_VADDR,
+            VMALLOC_BASE_VADDR,
         },
+        CurrentPagingConstsTrait, Paddr, Vaddr, MAX_NR_PAGES, MAX_PADDR,
     },
     specs::mm::{
         frame::mapping::lemma_meta_to_frame_soundness,
@@ -25,6 +26,18 @@ use crate::{
 };
 
 verus! {
+
+/// Caller obligation for reading the active root without an architecture-specific panic.
+/// LoongArch's getter asserts that the low and high roots agree.
+pub open spec fn current_page_table_read_req() -> bool {
+    #[cfg(target_arch = "loongarch64")]
+    {
+        super::loongarch::current_page_table_paddr_spec()
+            == super::loongarch::current_high_page_table_paddr_spec()
+    }
+    #[cfg(not(target_arch = "loongarch64"))]
+    { true }
+}
 
 pub open spec fn valid_frame_paddr(paddr: Paddr) -> bool {
     model::valid_tracked_frame_paddr_for::<CurrentArch>(paddr)
@@ -52,8 +65,10 @@ pub broadcast proof fn lemma_paddr_to_vaddr_properties(pa: Paddr)
         pa < VMALLOC_BASE_VADDR - LINEAR_MAPPING_BASE_VADDR,
     ensures
         LINEAR_MAPPING_BASE_VADDR <= #[trigger] paddr_to_vaddr(pa) < VMALLOC_BASE_VADDR,
+        0 < KERNEL_BASE_VADDR <= paddr_to_vaddr(pa),
         #[trigger] vaddr_to_paddr(paddr_to_vaddr(pa)) == pa,
 {
+    assert(0 < KERNEL_BASE_VADDR <= LINEAR_MAPPING_BASE_VADDR) by (compute_only);
 }
 
 pub broadcast proof fn lemma_vaddr_to_paddr_properties(va: Vaddr)
