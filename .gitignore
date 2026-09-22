@@ -60,6 +60,7 @@ doc
 !/.claude/skills/
 !/.claude/skills/vostd-code-review
 .codex/
+.pi/
 .copilot/
 .github/copilot-instructions.md
 .github/instructions.md
