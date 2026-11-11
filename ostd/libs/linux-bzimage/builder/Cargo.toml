@@ -9,6 +9,7 @@ repository = "https://github.com/asterinas/asterinas"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+vstd = { workspace = true }
 align_ext = { version = "0.1.0", path = "../../align_ext" }
 bitflags = "1.3"
 bytemuck = { version = "1.17.0", features = ["derive"] }
@@ -18,3 +19,6 @@ xmas-elf = "0.10.0"
 
 [lints]
 workspace = true
+
+[package.metadata.verus]
+verify = true

@@ -8,8 +8,21 @@ members = [
     "ostd/libs/id-alloc",
     "ostd/libs/ostd-pod",
     # "ostd/libs/ostd-macros",
-    # "ostd/libs/ostd-test",
+    "ostd/libs/ostd-test",
+    "ostd/libs/linux-bzimage/boot-params",
+    "ostd/libs/linux-bzimage/builder",
     # "kernel/libs/int-to-c-enum",
+]
+# The std-based builder is verified separately on the host.
+default-members = [
+    "verified_libs/bitflags",
+    "verified_libs/vstd_extra",
+    "ostd",
+    "ostd/libs/align_ext",
+    "ostd/libs/id-alloc",
+    "ostd/libs/ostd-pod",
+    "ostd/libs/ostd-test",
+    "ostd/libs/linux-bzimage/boot-params",
 ]
 exclude = [
     "dv",

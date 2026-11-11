@@ -2,6 +2,8 @@
 
 VERIFICATION_TARGETS := \
 	ostd \
+	ostd-test \
+	linux-boot-params \
 
 RUST_TARGETS := \
 	x86_64-unknown-none \
@@ -18,6 +20,11 @@ all: verify
 
 verify:
 	cargo dv verify --package $(VERIFICATION_TARGETS)
+	$(MAKE) verify-bzimage-builder
+
+.PHONY: verify-bzimage-builder
+verify-bzimage-builder:
+	cargo dv verify -p linux-bzimage-builder --target x86_64-unknown-linux-gnu
 
 verify-%:
 	cargo dv verify --package $(VERIFICATION_TARGETS) --target $*

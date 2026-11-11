@@ -15,6 +15,8 @@ pub mod encoder;
 mod mapping;
 mod pe_header;
 
+use vstd::prelude::*;
+
 use std::{
     fs::File,
     io::{Read, Seek, SeekFrom, Write},

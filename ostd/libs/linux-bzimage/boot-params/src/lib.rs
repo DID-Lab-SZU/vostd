@@ -6,15 +6,21 @@
 //! ABI compatible struct in Rust, despite that most of the fields are
 //! currently not needed by Asterinas.
 //!
+//! Field offsets are checked by tests; Verus does not establish ABI layout.
+//!
 #![cfg_attr(not(test), no_std)]
 
+use vstd::prelude::*;
+
 /// Magic stored in the boot protocol header.
+#[verus_verify]
 pub const LINUX_BOOT_HEADER_MAGIC: u32 = 0x53726448;
 
 /// Linux 32/64-bit Boot Protocol parameter struct.
 ///
 /// Originally defined in the linux source tree:
 /// `linux/arch/x86/include/uapi/asm/bootparam.h`
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct BootParams {
@@ -59,6 +65,7 @@ pub struct BootParams {
 ///
 /// Originally defined in the linux source tree:
 /// `linux/arch/x86/include/uapi/asm/bootparam.h`
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct SetupHeader {
@@ -103,6 +110,7 @@ pub struct SetupHeader {
     pub kernel_info_offset: u32,
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct ScreenInfo {
@@ -146,6 +154,7 @@ pub struct ScreenInfo {
     pub _reserved: [u8; 2],   /* 0x3e */
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct ApmBiosInfo {
@@ -160,6 +169,7 @@ pub struct ApmBiosInfo {
     pub dseg_len: u16,
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct IstInfo {
@@ -169,6 +179,7 @@ pub struct IstInfo {
     pub perf_level: u32,
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct SysDescTable {
@@ -176,6 +187,7 @@ pub struct SysDescTable {
     pub table: [u8; 14],
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct OlpcOfwHeader {
@@ -185,12 +197,14 @@ pub struct OlpcOfwHeader {
     pub irq_desc_table: u32,
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct EdidInfo {
     pub dummy: [u8; 128],
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct EfiInfo {
@@ -208,6 +222,7 @@ pub struct EfiInfo {
 ///
 /// Originally defined in the linux source tree:
 /// `linux/arch/x86/include/asm/e820/types.h`
+#[verus_verify]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum E820Type {
@@ -222,6 +237,7 @@ pub enum E820Type {
     ReservedKern = 128,
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct BootE820Entry {
@@ -230,8 +246,10 @@ pub struct BootE820Entry {
     pub typ: E820Type,
 }
 
+#[verus_verify]
 const E820_MAX_ENTRIES_ZEROPAGE: usize = 128;
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct EddDeviceParams {
@@ -242,6 +260,7 @@ pub struct EddDeviceParams {
     pub _dummy: [u8; (0xeec - 0xd00) / 6 - 8],
 }
 
+#[verus_verify]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct EddInfo {
@@ -254,7 +273,9 @@ pub struct EddInfo {
     pub params: EddDeviceParams,
 }
 
+#[verus_verify]
 const EDD_MBR_SIG_MAX: usize = 16;
+#[verus_verify]
 const EDDMAXNR: usize = 6;
 
 #[cfg(test)]
