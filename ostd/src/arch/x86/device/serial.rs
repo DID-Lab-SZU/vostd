@@ -2,6 +2,9 @@
 //! A port-mapped UART. Copied from uart_16550.
 #![expect(dead_code)]
 
+use vstd::prelude::*;
+use vstd_extra::external::group_io_port_models;
+
 use crate::{
     arch::device::io_port::{ReadWriteAccess, WriteOnlyAccess},
     io::IoPort,
@@ -10,6 +13,7 @@ use crate::{
 ///
 /// Serial ports are a legacy communications port common on IBM-PC compatible computers.
 /// Ref: <https://wiki.osdev.org/Serial_Ports>
+#[verus_verify]
 pub struct SerialPort {
     /// Data Register
     data: IoPort<u8, ReadWriteAccess>,
@@ -27,6 +31,27 @@ pub struct SerialPort {
     modem_status: IoPort<u8, ReadWriteAccess>,
 }
 
+verus! {
+
+impl View for SerialPort {
+    type V = Seq<u16>;
+
+    /// Register addresses in offset order, from data through modem status.
+    closed spec fn view(&self) -> Seq<u16> {
+        seq![
+            self.data@,
+            self.int_en@,
+            self.fifo_ctrl@,
+            self.line_ctrl@,
+            self.modem_ctrl@,
+            self.line_status@,
+            self.modem_status@,
+        ]
+    }
+}
+
+} // verus!
+#[verus_verify]
 impl SerialPort {
     /// Creates a serial port.
     ///
@@ -34,7 +59,15 @@ impl SerialPort {
     ///
     /// The caller must ensure that the base port is a valid serial base port and that it has
     /// exclusive ownership of the serial ports.
+    #[verus_spec(ret =>
+        requires
+            port + 7 <= u16::MAX,
+        ensures
+            ret@.len() == 7,
+            forall|i: int| 0 <= i < 7 ==> #[trigger] ret@[i] == port + i,
+    )]
     pub const unsafe fn new(port: u16) -> Self {
+        proof! { broadcast use group_io_port_models; }
         // SAFETY: The safety is upheld by the caller.
         unsafe {
             Self {
