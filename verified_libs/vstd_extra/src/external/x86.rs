@@ -1,9 +1,8 @@
 //! External specifications for the [`x86` crate](https://crates.io/crates/x86)
 //! constants and MSR accessors. Constant values are trusted to match
 //! the crate sources; the original constants are re-exported below. Also models the
-//! [`x86_64` crate](https://crates.io/crates/x86_64) MSR, address, paging, TLB, and CR3 APIs
-//! (assuming `memory_encryption` is disabled; hardware side effects are unmodeled) and
-//! `core::arch::x86_64::_rdtsc`.
+//! [`x86_64` crate](https://crates.io/crates/x86_64) MSR, address, paging frame, and CR3 flag APIs
+//! (assuming `memory_encryption` is disabled) and `core::arch::x86_64::_rdtsc`.
 use vstd::prelude::*;
 
 use core::arch::x86_64::CpuidResult;
@@ -22,11 +21,7 @@ pub use x86::{
 };
 use x86_64::{
     PhysAddr, VirtAddr,
-    instructions::tlb,
-    registers::{
-        control::{Cr3, Cr3Flags},
-        model_specific::Msr,
-    },
+    registers::{control::Cr3Flags, model_specific::Msr},
     structures::paging::{
         PhysFrame,
         page::{AddressNotAligned, PageSize, Size4KiB},
@@ -296,10 +291,6 @@ pub assume_specification<S: PageSize>[ PhysFrame::<S>::from_start_address ](
 
 #[verifier::external_type_specification]
 #[verifier::external_body]
-pub struct ExCr3(Cr3);
-
-#[verifier::external_type_specification]
-#[verifier::external_body]
 pub struct ExCr3Flags(Cr3Flags);
 
 pub uninterp spec fn cr3_flags_bits(flags: Cr3Flags) -> u64;
@@ -322,25 +313,6 @@ pub assume_specification[ Cr3Flags::PAGE_LEVEL_WRITETHROUGH ] -> (ret: Cr3Flags)
 pub assume_specification[ Cr3Flags::PAGE_LEVEL_CACHE_DISABLE ] -> (ret: Cr3Flags)
     ensures
         cr3_flags_bits(ret) == 0x10u64,
-;
-
-/// [`Cr3::write`](https://docs.rs/x86_64/0.15.5/x86_64/registers/control/struct.Cr3.html#method.write).
-pub assume_specification[ Cr3::write ](frame: PhysFrame<Size4KiB>, flags: Cr3Flags)
-    opens_invariants none
-    no_unwind
-;
-
-/// [`tlb::flush`](https://docs.rs/x86_64/0.15.5/x86_64/instructions/tlb/fn.flush.html).
-pub assume_specification[ tlb::flush ](addr: VirtAddr)
-    opens_invariants none
-    no_unwind
-;
-
-/// [`tlb::flush_all`](https://docs.rs/x86_64/0.15.5/x86_64/instructions/tlb/fn.flush_all.html);
-/// reloads CR3 (`Cr3::read` masks bits 52..63 so it cannot panic).
-pub assume_specification[ tlb::flush_all ]()
-    opens_invariants none
-    no_unwind
 ;
 
 } // verus!

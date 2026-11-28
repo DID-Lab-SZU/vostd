@@ -4,8 +4,14 @@
 use vstd::{arithmetic::power2::*, prelude::*, std_specs::iter::IteratorSpec};
 use vstd_extra::prelude::*;
 
-use crate::specs::arch::{ArchAddressSpaceModel, CurrentArch};
-use crate::mm::MAX_NR_LEVELS;
+use crate::{
+    cpu::cpu_count,
+    mm::MAX_NR_LEVELS,
+    specs::{
+        arch::{ArchAddressSpaceModel, CurrentArch},
+        mm::tlb::{CpuIdx, FlushSet, TlbModel},
+    },
+};
 
 use alloc::fmt;
 use core::ops::Range;
@@ -153,52 +159,172 @@ bitflags::bitflags! {
     }
 }
 
+/// Trusted hardware primitive for `invlpg`: flushes TLB entries for `addr` on
+/// the current CPU and updates [`TlbModel`].
+#[verus_verify]
+#[verifier::external_body]
+#[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
+    requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).apply_flush(FlushSet::addr(virt_addr_as_u64(addr) as Vaddr)),
+        ),
+    opens_invariants none
+    no_unwind
+)]
+#[inline(always)]
+fn tlb_flush_virt_addr(addr: VirtAddr) {
+    tlb::flush(addr);
+}
+
 /// Flush any TLB entry that contains the map of the given virtual address.
 ///
 /// This flush performs regardless of the global-page bit. So it can flush both global
 /// and non-global entries.
 #[verus_verify]
 #[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
     requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
         is_canonical_vaddr(vaddr as u64),
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).apply_flush(FlushSet::addr(vaddr)),
+        ),
     opens_invariants none
     no_unwind
 )]
 pub(crate) fn tlb_flush_addr(vaddr: Vaddr) {
-    tlb::flush(VirtAddr::new(vaddr as u64));
+    #[verus_spec(with Tracked(model), Ghost(cpu))]
+    tlb_flush_virt_addr(VirtAddr::new(vaddr as u64));
 }
 
 /// Flush any TLB entry that intersects with the given address range.
 #[verus_verify]
 #[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
     requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
         range.start < range.end ==> (range.end <= X86_CANONICAL_LOWER_END as usize
             || range.start >= X86_CANONICAL_UPPER_START as usize),
         range.start < range.end ==> range.start % PAGE_SIZE == 0,
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).apply_flush(FlushSet::range(*range)),
+        ),
 )]
 pub(crate) fn tlb_flush_addr_range(range: &Range<Vaddr>) {
     proof! {
         broadcast use axiom_range_step_by_postcondition;
+        old(model).cpu_state(cpu).lemma_apply_flush_empty();
+    }
+    proof_decl! {
+        let ghost init_model = *old(model);
+        let ghost init_state = init_model.cpu_state(cpu);
+        let ghost mut flushed = FlushSet::empty();
+        let ghost total_steps: int = if range.start < range.end {
+            (range.end - range.start + PAGE_SIZE - 1) / (PAGE_SIZE as int)
+        } else {
+            0
+        };
     }
 
     #[verus_spec(iter =>
         invariant
+            model.inv(),
+            0 <= cpu < cpu_count(),
             iter.iter.obeys_prophetic_iter_laws(),
             iter.iter.decrease() is Some,
+            iter.seq().len() == total_steps,
+            forall|k: int|
+                0 <= k < iter.seq().len() ==> #[trigger] iter.seq()[k] == range.start + k
+                    * PAGE_SIZE && range.start <= iter.seq()[k] < range.end,
             iter.seq().all(|v: Vaddr| is_canonical_vaddr(v as u64)),
+            !flushed.all_user,
+            flushed.vas =~= Set::from_finite_type(
+                |va: Vaddr|
+                    range.start <= va < range.end && (va - range.start) % PAGE_SIZE as int == 0
+                        && va < range.start + iter.index() * PAGE_SIZE,
+            ),
+            init_model.cpu_updated(*model, cpu, init_state.apply_flush(flushed)),
     )]
     for vaddr in range.clone().step_by(PAGE_SIZE) {
+        proof! {
+            assert(vaddr == iter.seq()[iter.index()]);
+            assert(vaddr == range.start + iter.index() * PAGE_SIZE);
+        }
+        #[verus_spec(with Tracked(model), Ghost(cpu))]
         tlb_flush_addr(vaddr);
+        proof! {
+            init_state.lemma_apply_flush_join(flushed, FlushSet::addr(vaddr));
+            flushed = flushed.join(FlushSet::addr(vaddr));
+            let next_bound = range.start + (iter.index() + 1) * PAGE_SIZE;
+            assert((vaddr - range.start) % PAGE_SIZE as int == 0) by (nonlinear_arith)
+                requires
+                    vaddr == range.start + iter.index() * PAGE_SIZE,
+                    PAGE_SIZE == 4096usize,
+            ;
+            assert(flushed.vas =~= Set::from_finite_type(
+                |va: Vaddr|
+                    range.start <= va < range.end && (va - range.start) % PAGE_SIZE as int == 0
+                        && va < next_bound,
+            )) by {
+                assert forall|va: Vaddr| #[trigger]
+                    flushed.vas.contains(va) <==> (range.start <= va < range.end && (va
+                        - range.start) % PAGE_SIZE as int == 0 && va < next_bound) by {
+                    if range.start <= va < range.end && (va - range.start) % PAGE_SIZE as int == 0
+                        && va < next_bound && va >= vaddr
+                    {
+                        assert((va - vaddr) % PAGE_SIZE as int == 0);
+                        assert(va == vaddr);
+                    }
+                };
+            };
+        }
+    }
+    proof! {
+        assert(range.start < range.end ==> range.end <= range.start + total_steps * PAGE_SIZE);
+        assert(flushed == FlushSet::range(*range)) by {
+            assert(flushed.vas =~= FlushSet::range(*range).vas);
+        };
     }
 }
 
 /// Flush all TLB entries except for the global-page entries.
 #[verus_verify]
+#[verifier::external_body]
 #[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
+    requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).apply_flush(FlushSet::all_user()),
+        ),
     opens_invariants none
     no_unwind
 )]
 pub(crate) fn tlb_flush_all_excluding_global() {
+    // Trusted hardware primitive: reloads CR3 without PCID (`CR4.PCIDE == 0`),
+    // invalidating all non-global TLB entries on the current CPU.
     tlb::flush_all();
 }
 
@@ -261,6 +387,36 @@ impl Default for PageTableEntry {
 
 } // verus!
 
+/// Trusted hardware primitive for CR3 writes: with `CR4.PCIDE == 0` and only
+/// `PWT`/`PCD` flag bits set, writing CR3 installs `frame`'s start address as
+/// the active root and invalidates all non-global TLB entries on the current CPU.
+#[verus_verify]
+#[verifier::external_body]
+#[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
+    requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
+        cr3_flags_bits(flags) == 0u64 || cr3_flags_bits(flags) == 0x8u64 || cr3_flags_bits(flags)
+            == 0x10u64,
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).activate(
+                phys_addr_as_u64(phys_frame_start_address(frame)) as Paddr,
+            ).apply_flush(FlushSet::all_user()),
+        ),
+    opens_invariants none
+    no_unwind
+)]
+#[inline(always)]
+unsafe fn write_cr3(frame: PhysFrame, flags: x86_64::registers::control::Cr3Flags) {
+    // SAFETY: The safety is upheld by the caller.
+    unsafe { x86_64::registers::control::Cr3::write(frame, flags) };
+}
+
 /// Activates the given level 4 page table.
 /// The cache policy of the root page table node is controlled by `root_pt_cache`.
 ///
@@ -270,10 +426,20 @@ impl Default for PageTableEntry {
 /// changing the page mapping.
 #[verus_verify]
 #[verus_spec(
+    with Tracked(model): Tracked<&mut TlbModel>, Ghost(cpu): Ghost<CpuIdx>
     requires
+        old(model).inv(),
+        0 <= cpu < cpu_count(),
         is_valid_x86_paddr(root_paddr as u64),
         root_paddr % PAGE_SIZE == 0,
         root_pt_cache is Writeback || root_pt_cache is Writethrough || root_pt_cache is Uncacheable,
+    ensures
+        final(model).inv(),
+        old(model).cpu_updated(
+            *final(model),
+            cpu,
+            old(model).cpu_state(cpu).activate(root_paddr).apply_flush(FlushSet::all_user()),
+        ),
 )]
 pub unsafe fn activate_page_table(root_paddr: Paddr, root_pt_cache: CachePolicy) {
     let addr = PhysFrame::from_start_address(x86_64::PhysAddr::new(root_paddr as u64)).unwrap();
@@ -285,7 +451,10 @@ pub unsafe fn activate_page_table(root_paddr: Paddr, root_pt_cache: CachePolicy)
     };
 
     // SAFETY: The safety is upheld by the caller.
-    unsafe { x86_64::registers::control::Cr3::write(addr, flags) };
+    unsafe {
+        #[verus_spec(with Tracked(model), Ghost(cpu))]
+        write_cr3(addr, flags);
+    }
 }
 
 verus! {

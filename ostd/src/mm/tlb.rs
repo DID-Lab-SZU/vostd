@@ -239,16 +239,10 @@ impl View for TlbFlushOp {
     open spec fn view(&self) -> FlushSet {
         match *self {
             TlbFlushOp::All => FlushSet::all_user(),
-            TlbFlushOp::Address(va) => FlushSet { all_user: false, vas: Set::empty().insert(va) },
+            TlbFlushOp::Address(va) => FlushSet::addr(va),
             // `tlb_flush_addr_range` invalidates one address per base page,
             // starting from `range.start`.
-            TlbFlushOp::Range(range) => FlushSet {
-                all_user: false,
-                vas: Set::from_finite_type(
-                    |va: Vaddr|
-                        range.start <= va < range.end && (va - range.start) % PAGE_SIZE as int == 0,
-                ),
-            },
+            TlbFlushOp::Range(range) => FlushSet::range(range),
         }
     }
 }

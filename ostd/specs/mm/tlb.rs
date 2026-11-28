@@ -20,10 +20,10 @@
 //! dispatching and synchronizing flush requests remain trusted. Which CPU runs
 //! the code is not modelled yet.
 //!
-//! TODO: Page-table updates do not add entries to `stale` yet, and no flush
-//! removes them, so [`TlbModel::coherent`] is not yet tied to the page table or
-//! maintained by `CursorMut::map` and `CursorMut::unmap`. This awaits the
-//! page-table-removal and arch flush contracts.
+//! TODO: Page-table updates do not add entries to `stale` yet, and
+//! `TlbFlusher::dispatch_tlb_flush`, `sync_tlb_flush`, and non-x86 arch flushes
+//! do not update [`TlbModel`] yet, so [`TlbModel::coherent`] is not yet tied to
+//! the page table or maintained by `CursorMut::map` and `CursorMut::unmap`.
 //!
 //! Frames are not kept alive until their TLB entries are flushed: the
 //! `page_keeper` of `OpsStack` is commented out, so the frame passed to
@@ -33,9 +33,11 @@ use vstd_extra::ownership::*;
 
 use crate::specs::mm::page_table::*;
 
+use core::ops::Range;
+
 use crate::{
     cpu::cpu_count,
-    mm::{Paddr, Vaddr},
+    mm::{PAGE_SIZE, Paddr, Vaddr},
 };
 
 verus! {
@@ -61,8 +63,35 @@ impl FlushSet {
         FlushSet { all_user: true, vas: Set::empty() }
     }
 
+    /// The meaning of flushing entries translating a single virtual address.
+    pub open spec fn addr(va: Vaddr) -> Self {
+        FlushSet { all_user: false, vas: Set::empty().insert(va) }
+    }
+
+    /// The meaning of flushing one address per base page across `range`,
+    /// starting from `range.start`.
+    pub open spec fn range(range: Range<Vaddr>) -> Self {
+        FlushSet {
+            all_user: false,
+            vas: Set::from_finite_type(
+                |va: Vaddr|
+                    range.start <= va < range.end && (va - range.start) % PAGE_SIZE as int == 0,
+            ),
+        }
+    }
+
     pub open spec fn join(self, other: Self) -> Self {
         FlushSet { all_user: self.all_user || other.all_user, vas: self.vas + other.vas }
+    }
+
+    /// Whether this flush set is guaranteed to invalidate `entry`.
+    ///
+    /// Global (`AddrSpaceId::Kernel`) entries are never invalidated by the
+    /// model. Non-global entries are invalidated when `all_user` holds or when
+    /// any flushed virtual address lies in `entry.map.va_range`.
+    pub open spec fn invalidates(self, entry: TlbEntry) -> bool {
+        entry.asid is User && (self.all_user || exists|va: Vaddr| #[trigger]
+            self.vas.contains(va) && entry.map.va_range.start <= va < entry.map.va_range.end)
     }
 }
 
@@ -105,6 +134,89 @@ impl Inv for CpuTlbState {
     }
 }
 
+impl CpuTlbState {
+    /// The TLB state after flushing `flush` on this CPU.
+    pub open spec fn apply_flush(self, flush: FlushSet) -> Self {
+        let resident = if flush.all_user {
+            match self.active {
+                Some(root) => set![AddrSpaceId::Kernel, AddrSpaceId::User(root)],
+                None => set![AddrSpaceId::Kernel],
+            }
+        } else {
+            self.resident
+        };
+        CpuTlbState {
+            active: self.active,
+            resident,
+            stale: self.stale.filter(|e: TlbEntry| !flush.invalidates(e)),
+        }
+    }
+
+    /// The TLB state after installing `root` as the active user page table on
+    /// this CPU, without invalidating existing TLB entries.
+    pub open spec fn activate(self, root: Paddr) -> Self {
+        CpuTlbState {
+            active: Some(root),
+            resident: self.resident.insert(AddrSpaceId::User(root)),
+            stale: self.stale,
+        }
+    }
+
+    /// Applying an empty flush leaves the CPU TLB state unchanged.
+    pub proof fn lemma_apply_flush_empty(self)
+        ensures
+            self.apply_flush(FlushSet::empty()) == self,
+    {
+        assert(self.apply_flush(FlushSet::empty()).stale =~= self.stale);
+    }
+
+    /// Sequential flushes compose via [`FlushSet::join`].
+    pub proof fn lemma_apply_flush_join(self, first: FlushSet, second: FlushSet)
+        ensures
+            self.apply_flush(first).apply_flush(second) == self.apply_flush(first.join(second)),
+    {
+        let lhs = self.apply_flush(first).apply_flush(second);
+        let rhs = self.apply_flush(first.join(second));
+        assert(lhs.resident =~= rhs.resident);
+        assert(lhs.stale =~= rhs.stale) by {
+            assert forall|e: TlbEntry| #[trigger]
+                lhs.stale.contains(e) <==> rhs.stale.contains(e) by {
+                if first.join(second).invalidates(e) {
+                    if !first.all_user && !second.all_user {
+                        let va = choose|va: Vaddr|
+                            first.join(second).vas.contains(va) && e.map.va_range.start <= va
+                                < e.map.va_range.end;
+                        if first.vas.contains(va) {
+                            assert(first.invalidates(e));
+                        } else {
+                            assert(second.vas.contains(va));
+                            assert(second.invalidates(e));
+                        }
+                    }
+                }
+                if first.invalidates(e) {
+                    if !first.all_user {
+                        let va = choose|va: Vaddr|
+                            first.vas.contains(va) && e.map.va_range.start <= va
+                                < e.map.va_range.end;
+                        assert(first.join(second).vas.contains(va));
+                    }
+                    assert(first.join(second).invalidates(e));
+                }
+                if second.invalidates(e) {
+                    if !second.all_user {
+                        let va = choose|va: Vaddr|
+                            second.vas.contains(va) && e.map.va_range.start <= va
+                                < e.map.va_range.end;
+                        assert(first.join(second).vas.contains(va));
+                    }
+                    assert(first.join(second).invalidates(e));
+                }
+            };
+        }
+    }
+}
+
 /// The TLB of one CPU.
 pub ghost struct CpuTlb {
     cpu: CpuIdx,
@@ -144,6 +256,13 @@ impl TlbModel {
     /// The TLB state of CPU `c`, the view of a `CpuId`.
     pub closed spec fn cpu_state(self, c: CpuIdx) -> CpuTlbState {
         self.cpus[c]@
+    }
+
+    /// `post` matches `self` on every CPU except `cpu`, whose TLB state is `next`.
+    pub open spec fn cpu_updated(self, post: Self, cpu: CpuIdx, next: CpuTlbState) -> bool {
+        &&& post.cpu_state(cpu) == next
+        &&& forall|c: CpuIdx|
+            0 <= c < cpu_count() && c != cpu ==> #[trigger] post.cpu_state(c) == self.cpu_state(c)
     }
 
     /// No CPU caches an entry that its page table no longer backs.
