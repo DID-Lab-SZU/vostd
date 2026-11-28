@@ -38,7 +38,7 @@
 //! Note that data races on untyped memory are explicitly allowed (since pages can be mapped to
 //! user space, making it impossible to avoid data races). However, they may produce erroneous
 //! results, such as unexpected bytes being copied, but do not cause soundness problems.
-use vstd::{arithmetic::power2::is_pow2, prelude::*};
+use vstd::{arithmetic::power2::is_pow2, math::min, prelude::*};
 use vstd_extra::{assert, ownership::Inv};
 
 pub use crate::specs::mm::io::{
@@ -549,11 +549,11 @@ impl<'a> VmWriter<'a, Infallible> {
             final(owner_r).inv(),
             final(self).wf(*final(owner_w)),
             final(reader).wf(*final(owner_r)),
-            r == vstd::math::min(old(self).avail() as int, old(reader).remain() as int),
-            final(self).avail() == old(self).avail() - r as usize,
-            final(self).cursor.vaddr == old(self).cursor.vaddr + r as usize,
-            final(reader).remain() == old(reader).remain() - r as usize,
-            final(reader).cursor.vaddr == old(reader).cursor.vaddr + r as usize,
+            r == min(old(self).avail() as int, old(reader).remain() as int),
+            final(self).avail() == old(self).avail() - r,
+            final(self).cursor.vaddr == old(self).cursor.vaddr + r,
+            final(reader).remain() == old(reader).remain() - r,
+            final(reader).cursor.vaddr == old(reader).cursor.vaddr + r,
             final(owner_w).has_write_view(),
             final(owner_r).read_view_initialized(),
     )]
@@ -607,7 +607,13 @@ impl<'a> VmWriter<'a, Infallible> {
                 Err(_) => {
                     *old(self) == *final(self)
                 },
-            }
+            },
+        returns
+            if old(self).avail() < core::mem::size_of::<T>() {
+                Err(Error::InvalidArgs)
+            } else {
+                Ok(())
+            },
     )]
     pub fn write_once<T: PodOnce>(&mut self, new_val: &T) -> Result<()> {
         if self.avail() < core::mem::size_of::<T>() {
@@ -796,14 +802,14 @@ impl<'a> VmReader<'a, Infallible> {
             final(writer).inv(),
             final(self).wf(*final(owner_r)),
             final(writer).wf(*final(owner_w)),
-            r == vstd::math::min(old(self).remain() as int, old(writer).avail() as int),
-            final(self).remain() == old(self).remain() - r as usize,
-            final(self).cursor.vaddr == old(self).cursor.vaddr + r as usize,
-            final(writer).avail() == old(writer).avail() - r as usize,
-            final(writer).cursor.vaddr == old(writer).cursor.vaddr + r as usize,
+            r == min(old(self).remain() as int, old(writer).avail() as int),
+            final(self).remain() == old(self).remain() - r,
+            final(self).cursor.vaddr == old(self).cursor.vaddr + r,
+            final(writer).avail() == old(writer).avail() - r,
+            final(writer).cursor.vaddr == old(writer).cursor.vaddr + r,
             consumed_w@.inv(),
             consumed_w@.range.start == old(owner_w).range.start,
-            consumed_w@.range.end == old(owner_w).range.start + r as usize,
+            consumed_w@.range.end == old(owner_w).range.start + r,
             consumed_w@.has_write_view(),
             final(owner_w).has_write_view(),
             final(owner_r).read_view_initialized(),
@@ -1035,8 +1041,12 @@ impl<'a> VmReader<'a, Infallible> {
 
 #[verus_verify]
 impl<'a> VmReader<'a, Fallible> {
-    /// Constructs a [`VmReader`] from a pointer and a length, which represents
-    /// a memory range in USER space.
+    /// Constructs a `VmReader` from a pointer and a length, which represents
+    /// a memory range in user space.
+    ///
+    /// # Safety
+    ///
+    /// The virtual address range `ptr..ptr + len` must be in user space.
     ///
     /// # Verified Properties
     /// ## Preconditions
@@ -1142,8 +1152,16 @@ impl<'a> VmReader<'a, Fallible> {
             final(self).end == old(self).end,
             final(self).ghost_id == old(self).ghost_id,
             final(self).cursor.range == old(self).cursor.range,
-            r matches Ok(collected) ==> collected.len() == old(self).remain(),
-            r is Err ==> *final(self) == *old(self),
+            match r {
+                Ok(collected) => {
+                    &&& collected.len() == old(self).remain()
+                    &&& final(self).cursor == old(self).end
+                },
+                Err(err) => {
+                    &&& err == Error::PageFault
+                    &&& *final(self) == *old(self)
+                },
+            },
     )]
     pub fn collect(&mut self) -> Result<alloc::vec::Vec<u8>> {
         let len = self.remain();
@@ -1288,6 +1306,63 @@ pub trait VmIo<P: Sized>: Send + Sync + Sized {
             ),
     ;
 
+    /// Reads a specified number of bytes at a specified offset into a given buffer.
+    ///
+    /// # No short reads
+    ///
+    /// Similar to [`read`].
+    ///
+    /// [`read`]: VmIo::read
+    fn read_bytes(&self, offset: usize, buf: &mut [u8], Tracked(owner): Tracked<&mut P>) -> (r:
+        Result<()>)
+        requires
+            !Self::obeys_vmio_read_requires(),
+    {
+        proof_decl! {
+            let tracked mut writer_own_inner: VmIoOwner;
+        }
+        #[verus_spec(with => Tracked(writer_own_inner))]
+        let infallible_writer = VmWriter::from(buf);
+        let mut writer = infallible_writer.to_fallible();
+        self.read(offset, &mut writer, Tracked(&mut writer_own_inner), Tracked(owner))
+    }
+
+    /// Reads a value of a specified type at a specified offset.
+    fn read_val<T: Pod>(&self, offset: usize, Tracked(owner): Tracked<&mut P>) -> (r: Result<T>)
+        requires
+            !Self::obeys_vmio_read_requires(),
+    {
+        let mut val = T::new_uninit();
+        match self.read_bytes(offset, val.as_bytes_mut(), Tracked(owner)) {
+            Ok(_) => Ok(val),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Reads a slice of a specified type at a specified offset.
+    ///
+    /// # No short reads
+    ///
+    /// Similar to [`read`].
+    ///
+    /// [`read`]: VmIo::read
+    fn read_slice<T: Pod>(
+        &self,
+        offset: usize,
+        slice: &mut [T],
+        Tracked(owner): Tracked<&mut P>,
+    ) -> (r: Result<()>)
+        requires
+            !Self::obeys_vmio_read_requires(),
+    {
+        let len_in_bytes = core::mem::size_of_val(slice);
+        let ptr = slice.as_mut_ptr() as *mut u8;
+        // SAFETY: the slice can be transmuted to a writable byte slice since
+        // the elements are all Plain-Old-Data (Pod) types.
+        let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len_in_bytes) };
+        self.read_bytes(offset, buf, Tracked(owner))
+    }
+
     /// Writes all data from a given `VmReader` at a specified offset.
     ///
     /// # No short writes
@@ -1324,62 +1399,13 @@ pub trait VmIo<P: Sized>: Send + Sync + Sized {
             ),
     ;
 
-    /// Reads a specified number of bytes at a specified offset into a given buffer.
-    ///
-    /// Wraps `buf` in a [`VmWriter`] (whose tracked owner is minted internally
-    /// from the slice via [`VmWriter::from`]) and delegates to [`Self::read`].
-    /// The shallow contract here only forwards the result; impls with non-trivial
-    /// `read_requires` must override.
-    fn read_bytes(&self, offset: usize, buf: &mut [u8], Tracked(owner): Tracked<&mut P>) -> (r:
-        Result<()>)
-        requires
-            !Self::obeys_vmio_read_requires(),
-    {
-        proof_decl! {
-            let tracked mut writer_own_inner: VmIoOwner;
-        }
-        #[verus_spec(with => Tracked(writer_own_inner))]
-        let infallible_writer = VmWriter::from(buf);
-        let mut writer = infallible_writer.to_fallible();
-        self.read(offset, &mut writer, Tracked(&mut writer_own_inner), Tracked(owner))
-    }
-
-    /// Reads a value of a specified type at a specified offset.
-    fn read_val<T: Pod>(&self, offset: usize, Tracked(owner): Tracked<&mut P>) -> (r: Result<T>)
-        requires
-            !Self::obeys_vmio_read_requires(),
-    {
-        let mut val = T::new_uninit();
-        match self.read_bytes(offset, val.as_bytes_mut(), Tracked(owner)) {
-            Ok(_) => Ok(val),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Reads a slice of a specified type at a specified offset.
-    fn read_slice<T: Pod>(
-        &self,
-        offset: usize,
-        slice: &mut [T],
-        Tracked(owner): Tracked<&mut P>,
-    ) -> (r: Result<()>)
-        requires
-            !Self::obeys_vmio_read_requires(),
-    {
-        let len_in_bytes = core::mem::size_of_val(slice);
-        let ptr = slice.as_mut_ptr() as *mut u8;
-        // SAFETY: the slice can be transmuted to a writable byte slice since
-        // the elements are all Plain-Old-Data (Pod) types.
-        let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len_in_bytes) };
-        self.read_bytes(offset, buf, Tracked(owner))
-    }
-
     /// Writes a specified number of bytes from a given buffer at a specified offset.
     ///
-    /// Wraps `buf` in a [`VmReader`] (whose tracked owner is minted internally
-    /// from the slice via [`VmReader::from`]) and delegates to [`Self::write`].
-    /// The shallow contract here only forwards the result; impls with non-trivial
-    /// `write_requires` must override.
+    /// # No short writes
+    ///
+    /// Similar to [`write`].
+    ///
+    /// [`write`]: VmIo::write
     fn write_bytes(&self, offset: usize, buf: &[u8], Tracked(owner): Tracked<&mut P>) -> (r: Result<
         (),
     >)
@@ -1820,8 +1846,15 @@ impl<'a, Fallibility> VmWriter<'a, Fallibility> {
 
 #[verus_verify]
 impl<'a> VmWriter<'a, Fallible> {
-    /// Constructs a [`VmWriter`] from a pointer and a length, which represents
-    /// a memory range in USER space.
+    /// Constructs a `VmWriter` from a pointer and a length, which represents
+    /// a memory range in user space.
+    ///
+    /// The current context should be consistently associated with valid user space during the
+    /// entire lifetime `'a`. This is for correct semantics and is not a safety requirement.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be in user space for `len` bytes.
     ///
     /// # Verified Properties
     /// ## Preconditions
@@ -1932,6 +1965,11 @@ impl<'a> VmWriter<'a, Fallible> {
                 &&& n <= len
                 &&& n <= old(self).avail()
                 &&& final(self).cursor.vaddr == old(self).cursor.vaddr + n
+            },
+            r matches Ok(n) ==> n == min(len as int, old(self).avail() as int),
+            r matches Err((err, n)) ==> {
+                &&& err == Error::PageFault
+                &&& n < min(len as int, old(self).avail() as int)
             },
     )]
     pub fn fill_zeros(&mut self, len: usize) -> core::result::Result<usize, (Error, usize)> {
@@ -2138,7 +2176,11 @@ macro_rules! impl_read_fallible {
                         &&& final(writer).cursor.vaddr == old(writer).cursor.vaddr + n
                         &&& n <= old(self).remain()
                         &&& n <= old(writer).avail()
-                        &&& r is Ok ==> n == vstd::math::min(old(self).remain() as int, old(writer).avail() as int)
+                        &&& r is Ok ==> n == min(old(self).remain() as int, old(writer).avail() as int)
+                    },
+                    r matches Err((err, n)) ==> {
+                        &&& err == Error::PageFault
+                        &&& n < min(old(self).remain() as int, old(writer).avail() as int)
                     },
             )]
             fn read_fallible(
@@ -2193,7 +2235,11 @@ macro_rules! impl_write_fallible {
                         &&& final(reader).cursor.vaddr == old(reader).cursor.vaddr + n
                         &&& n <= old(self).avail()
                         &&& n <= old(reader).remain()
-                        &&& r is Ok ==> n == vstd::math::min(old(self).avail() as int, old(reader).remain() as int)
+                        &&& r is Ok ==> n == min(old(self).avail() as int, old(reader).remain() as int)
+                    },
+                    r matches Err((err, n)) ==> {
+                        &&& err == Error::PageFault
+                        &&& n < min(old(self).avail() as int, old(reader).remain() as int)
                     },
             )]
             fn write_fallible(
